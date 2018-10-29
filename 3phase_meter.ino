@@ -1,3 +1,12 @@
+#include <WiFiEspClient.h>
+#include <WiFiEsp.h>
+#include <WiFiEspUdp.h>
+#include <PubSubClient.h>
+#include "SoftwareSerial.h"
+
+#define WIFI_AP "YOUR_WIFI_AP"
+#define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
+
 #include "EmonLib.h"                   // Include Emon Library
 EnergyMonitor emon1;                   // Create an instance
 EnergyMonitor emon2;                   // Create an instance
@@ -7,6 +16,9 @@ EnergyMonitor emon3;                   // Create an instance
 #define VOLTAGE 220.0
 #define SAMPLES 1480
 
+#define RED_LED   10
+#define GREEN_LED 11
+
 int currentPins[3] = {0,1,2};              //Assign phase CT inputs to analog pins
 double kilos[3];
 unsigned long startMillis[3];
@@ -15,14 +27,84 @@ double RMSCurrent[3];
 int RMSPower[3];
 int peakPower[3];
 
+// Initialize the Ethernet client object
+WiFiEspClient espClient;
+
+// Initialize DHT sensor.
+DHT dht(DHTPIN, DHTTYPE);
+
+PubSubClient client(espClient);
+int status = WL_IDLE_STATUS;
+
+SoftwareSerial soft(0, 1); // RX, TX
+
+void InitWiFi()
+{
+  // initialize serial for ESP module
+  soft.begin(9600);
+  // initialize ESP module
+  WiFi.init(&soft);
+  // check for the presence of the shield
+  if (WiFi.status() == WL_NO_SHIELD) {
+    Serial.println("WiFi shield not present");
+    // don't continue
+    while (true);
+  }
+
+  Serial.println("Connecting to AP ...");
+  // attempt to connect to WiFi network
+  ConnectWifi();
+}
+
+void ConnectWifi() {
+  while ( status != WL_CONNECTED) {
+    Serial.print("Attempting to connect to WPA SSID: ");
+    Serial.println(WIFI_AP);
+    // Connect to WPA/WPA2 network
+    status = WiFi.begin(WIFI_AP, WIFI_PASSWORD);
+    delay(500);
+  }
+  Serial.println("Connected to AP");
+}
+
+void reconnect() {
+  // Loop until we're reconnected
+  while (!client.connected()) {
+    Serial.print("Connecting to MQTT-server ...");
+    // Attempt to connect (clientId, username, password)
+    if ( client.connect("House Power Meter", TOKEN, NULL) ) {
+      Serial.println( "[DONE]" );
+    } else {
+      Serial.print( "[FAILED] [ rc = " );
+      Serial.print( client.state() );
+      Serial.println( " : retrying in 5 seconds]" );
+      // Wait 5 seconds before retrying
+      delay( 5000 );
+    }
+  }
+}
+
 void setup() 
 { 
   Serial.begin(115200);
+
+  pinMode(RED_LED, OUTPUT);
+  pinMode(GREEN_LED, OUTPUT);
+
+  for(int i=0; i<=16;i++) {
+    digitalWrite(RED_LED, i&0x01 ? HIGH : LOW);
+    digitalWrite(GREEN_LED, i&0x02 ? HIGH : LOW);
+    delay(200);
+  }
+
   Serial.print("3 Phase Energy Meter");
 
   emon1.current(currentPins[0], I_CAL);             // Current: input pin, calibration.
   emon2.current(currentPins[1], I_CAL);             // Current: input pin, calibration.
   emon3.current(currentPins[2], I_CAL);             // Current: input pin, calibration.
+
+  InitWiFi();
+  client.setServer( mqttServer, 1883 );
 
   delay(1000);
 }
@@ -62,18 +144,39 @@ void readPhase ()      //Method to read information from CTs
 
 void loop()   //Calls the methods to read values from CTs and changes display
 {
+  status = WiFi.status();
+  if ( status != WL_CONNECTED)
+    ConnectWifi();
+
+  if ( !client.connected() )
+    reconnect();
+
   readPhase();
-  displayKilowattHours ();
+  displayValues();
+  client.publish( "theHouse/power/telemetry", "values" );
+
   delay(1000);
-  readPhase();
-  displayCurrent ();
-  delay(1000);
-  readPhase();
-  displayRMSPower ();
-  delay(1000);
-  readPhase();
-  displayPeakPower ();
-  delay(1000);
+
+  client.loop();
+}
+
+void displayValues()
+{
+  static int lp=0;
+  switch(lp++ % 4) {
+    case 0:
+      displayKilowattHours ();
+      break;
+    case 1:
+      displayCurrent ();
+      break;
+    case 2:
+      displayRMSPower ();
+      break;
+    case 3:
+      displayPeakPower ();
+      break;
+  }
 }
 
 void displayKilowattHours ()  //Displays all kilowatt hours data
