@@ -4,8 +4,7 @@
 #include <PubSubClient.h>
 #include "SoftwareSerial.h"
 
-#define WIFI_AP "YOUR_WIFI_AP"
-#define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
+#include "mySSID.h"
 
 #include "EmonLib.h"                   // Include Emon Library
 EnergyMonitor emon1;                   // Create an instance
@@ -15,6 +14,9 @@ EnergyMonitor emon3;                   // Create an instance
 #define I_CAL   (111.1/3.82)
 #define VOLTAGE 220.0
 #define SAMPLES 1480
+
+#define RST 8
+#define CHP 9
 
 #define RED_LED   10
 #define GREEN_LED 11
@@ -29,9 +31,6 @@ int peakPower[3];
 
 // Initialize the Ethernet client object
 WiFiEspClient espClient;
-
-// Initialize DHT sensor.
-DHT dht(DHTPIN, DHTTYPE);
 
 PubSubClient client(espClient);
 int status = WL_IDLE_STATUS;
@@ -59,9 +58,9 @@ void InitWiFi()
 void ConnectWifi() {
   while ( status != WL_CONNECTED) {
     Serial.print("Attempting to connect to WPA SSID: ");
-    Serial.println(WIFI_AP);
+    Serial.println(ssid);
     // Connect to WPA/WPA2 network
-    status = WiFi.begin(WIFI_AP, WIFI_PASSWORD);
+    status = WiFi.begin(ssid, password);
     delay(500);
   }
   Serial.println("Connected to AP");
@@ -72,7 +71,7 @@ void reconnect() {
   while (!client.connected()) {
     Serial.print("Connecting to MQTT-server ...");
     // Attempt to connect (clientId, username, password)
-    if ( client.connect("House Power Meter", TOKEN, NULL) ) {
+    if ( client.connect("House-Power-Meter") ) {
       Serial.println( "[DONE]" );
     } else {
       Serial.print( "[FAILED] [ rc = " );
@@ -84,12 +83,29 @@ void reconnect() {
   }
 }
 
+void reset() {
+  digitalWrite(RED_LED,HIGH);
+  digitalWrite(CHP,HIGH);
+  digitalWrite(RST,LOW);
+  delay(2000);
+  digitalWrite(RST,HIGH);
+  delay(1000);
+  digitalWrite(RED_LED,LOW);
+}
+
 void setup() 
 { 
   Serial.begin(115200);
 
+  pinMode(RST, OUTPUT);
+  pinMode(CHP, OUTPUT);
   pinMode(RED_LED, OUTPUT);
   pinMode(GREEN_LED, OUTPUT);
+
+  digitalWrite(CHP,HIGH);
+  digitalWrite(RST,HIGH);
+
+  reset();
 
   for(int i=0; i<=16;i++) {
     digitalWrite(RED_LED, i&0x01 ? HIGH : LOW);
@@ -103,8 +119,10 @@ void setup()
   emon2.current(currentPins[1], I_CAL);             // Current: input pin, calibration.
   emon3.current(currentPins[2], I_CAL);             // Current: input pin, calibration.
 
+
   InitWiFi();
-  client.setServer( mqttServer, 1883 );
+
+  client.setServer( mqtt_server, 1883 );
 
   delay(1000);
 }
@@ -168,13 +186,13 @@ void displayValues()
       displayKilowattHours ();
       break;
     case 1:
-      displayCurrent ();
+//      displayCurrent ();
       break;
     case 2:
-      displayRMSPower ();
+//      displayRMSPower ();
       break;
     case 3:
-      displayPeakPower ();
+//      displayPeakPower ();
       break;
   }
 }
@@ -189,7 +207,7 @@ void displayKilowattHours ()  //Displays all kilowatt hours data
   Serial.print("kWh ");
   Serial.println("Energy");
 }
-
+/*
 void displayCurrent ()      //Displays all current data
 {
   Serial.print(RMSCurrent[0]);
@@ -222,7 +240,7 @@ void displayPeakPower ()    //Displays all peak power data
   Serial.print("W ");
   Serial.println("Max Pwr");
 }
-
+*/
 #if 0
 
 
