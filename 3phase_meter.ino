@@ -32,7 +32,8 @@ WiFiEspClient espClient;
 PubSubClient client(espClient);
 int status = WL_IDLE_STATUS;
 
-#ifdef  SW_SERIAL
+#define USE_SW_SERIAL
+#ifdef  USE_SW_SERIAL
   SoftwareSerial wifiSerial(8, 9); // RX, TX
 #else
   #define wifiSerial  Serial1
@@ -98,11 +99,6 @@ void setup()
   }
 
   Serial.println("3 Phase Energy Meter");
-#ifdef  SW_SERIAL
-  Serial.println("SW serial (8,9)");
-#else
-  Serial.println("HW Serial (0,1)");
-#endif
 
   emon1.current(currentPins[0], I_CAL);             // Current: input pin, calibration.
   emon2.current(currentPins[1], I_CAL);             // Current: input pin, calibration.
@@ -229,49 +225,3 @@ void displayPeakPower ()    //Displays all peak power data
   Serial.print("W ");
   Serial.println("Max Pwr");
 }
-
-#if 0
-
-
-
-// EmonLibrary examples openenergymonitor.org, Licence GNU GPL V3
-
-#include "EmonLib.h"                   // Include Emon Library
-EnergyMonitor emon1;                   // Create an instance
-EnergyMonitor emon2;                   // Create an instance
-EnergyMonitor emon3;                   // Create an instance
-
-#define I_CAL   (111.1/3.82)
-#define VOLTAGE 220.0
-#define SAMPLES 1480
-void setup()
-{  
-  Serial.begin(9600);
-  
-  emon1.current(0, I_CAL);             // Current: input pin, calibration.
-  emon2.current(1, I_CAL);             // Current: input pin, calibration.
-  emon3.current(2, I_CAL);             // Current: input pin, calibration.
-}
-
-void loop()
-{
-  double Irms1 = emon1.calcIrms(SAMPLES);  // Calculate Irms only
-  double Irms2 = emon2.calcIrms(SAMPLES);  // Calculate Irms only
-  double Irms3 = emon3.calcIrms(SAMPLES);  // Calculate Irms only
-  
-  Serial.print(Irms1*VOLTAGE);         // Apparent power
-  Serial.print(" ");
-  Serial.print(Irms1);          // Irms
-  Serial.print(" | ");
-  Serial.print(Irms2*VOLTAGE);         // Apparent power
-  Serial.print(" ");
-  Serial.print(Irms2);          // Irms
-  Serial.print(" | ");
-  Serial.print(Irms3*VOLTAGE);         // Apparent power
-  Serial.print(" ");
-  Serial.println(Irms3);          // Irms
-  Serial.print("Vcc = ");
-  Serial.println(emon1.readVcc());
-}
-
-#endif
