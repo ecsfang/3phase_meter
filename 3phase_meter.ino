@@ -15,9 +15,6 @@ EnergyMonitor emon3;                   // Create an instance
 #define VOLTAGE 220.0
 #define SAMPLES 1480
 
-#define RST 8
-#define CHP 9
-
 #define RED_LED   10
 #define GREEN_LED 11
 
@@ -35,14 +32,18 @@ WiFiEspClient espClient;
 PubSubClient client(espClient);
 int status = WL_IDLE_STATUS;
 
-SoftwareSerial soft(0, 1); // RX, TX
+#ifdef  SW_SERIAL
+  SoftwareSerial wifiSerial(8, 9); // RX, TX
+#else
+  #define wifiSerial  Serial1
+#endif
 
 void InitWiFi()
 {
   // initialize serial for ESP module
-  soft.begin(9600);
+  wifiSerial.begin(9600);
   // initialize ESP module
-  WiFi.init(&soft);
+  WiFi.init(&wifiSerial);
   // check for the presence of the shield
   if (WiFi.status() == WL_NO_SHIELD) {
     Serial.println("WiFi shield not present");
@@ -83,29 +84,12 @@ void reconnect() {
   }
 }
 
-void reset() {
-  digitalWrite(RED_LED,HIGH);
-  digitalWrite(CHP,HIGH);
-  digitalWrite(RST,LOW);
-  delay(2000);
-  digitalWrite(RST,HIGH);
-  delay(1000);
-  digitalWrite(RED_LED,LOW);
-}
-
 void setup() 
 { 
   Serial.begin(115200);
 
-  pinMode(RST, OUTPUT);
-  pinMode(CHP, OUTPUT);
   pinMode(RED_LED, OUTPUT);
   pinMode(GREEN_LED, OUTPUT);
-
-  digitalWrite(CHP,HIGH);
-  digitalWrite(RST,HIGH);
-
-  reset();
 
   for(int i=0; i<=16;i++) {
     digitalWrite(RED_LED, i&0x01 ? HIGH : LOW);
@@ -113,12 +97,16 @@ void setup()
     delay(200);
   }
 
-  Serial.print("3 Phase Energy Meter");
+  Serial.println("3 Phase Energy Meter");
+#ifdef  SW_SERIAL
+  Serial.println("SW serial (8,9)");
+#else
+  Serial.println("HW Serial (0,1)");
+#endif
 
   emon1.current(currentPins[0], I_CAL);             // Current: input pin, calibration.
   emon2.current(currentPins[1], I_CAL);             // Current: input pin, calibration.
   emon3.current(currentPins[2], I_CAL);             // Current: input pin, calibration.
-
 
   InitWiFi();
 
@@ -140,6 +128,7 @@ int checkIdle ()
 void readPhase ()      //Method to read information from CTs
 {
   memset(RMSCurrent, 0, 3*sizeof(double));
+
   if( !checkIdle() ) {
     RMSCurrent[0] = emon1.calcIrms(SAMPLES);  // Calculate Irms only
     RMSCurrent[1] = emon2.calcIrms(SAMPLES);  // Calculate Irms only
@@ -186,13 +175,13 @@ void displayValues()
       displayKilowattHours ();
       break;
     case 1:
-//      displayCurrent ();
+      displayCurrent ();
       break;
     case 2:
-//      displayRMSPower ();
+      displayRMSPower ();
       break;
     case 3:
-//      displayPeakPower ();
+      displayPeakPower ();
       break;
   }
 }
@@ -207,7 +196,7 @@ void displayKilowattHours ()  //Displays all kilowatt hours data
   Serial.print("kWh ");
   Serial.println("Energy");
 }
-/*
+
 void displayCurrent ()      //Displays all current data
 {
   Serial.print(RMSCurrent[0]);
@@ -240,7 +229,7 @@ void displayPeakPower ()    //Displays all peak power data
   Serial.print("W ");
   Serial.println("Max Pwr");
 }
-*/
+
 #if 0
 
 
