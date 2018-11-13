@@ -1,15 +1,24 @@
+
+//#define USE_SW_SERIAL
+
 #include <WiFiEspClient.h>
 #include <WiFiEsp.h>
 #include <WiFiEspUdp.h>
 #include <PubSubClient.h>
+
+#ifdef  USE_SW_SERIAL
 #include "SoftwareSerial.h"
+#endif
 
 #include "mySSID.h"
 
 #include "EmonLib.h"                   // Include Emon Library
-EnergyMonitor emon1;                   // Create an instance
-EnergyMonitor emon2;                   // Create an instance
-EnergyMonitor emon3;                   // Create an instance
+
+//EnergyMonitor emon1;                   // Create an instance
+//EnergyMonitor emon2;                   // Create an instance
+//EnergyMonitor emon3;                   // Create an instance
+
+EnergyMonitor emons[3];                   // Create an instance
 
 #define I_CAL   (111.1/3.82)
 #define VOLTAGE 220.0
@@ -32,7 +41,6 @@ WiFiEspClient espClient;
 PubSubClient client(espClient);
 int status = WL_IDLE_STATUS;
 
-#define USE_SW_SERIAL
 #ifdef  USE_SW_SERIAL
   SoftwareSerial wifiSerial(8, 9); // RX, TX
 #else
@@ -60,7 +68,10 @@ void InitWiFi()
 void ConnectWifi() {
   while ( status != WL_CONNECTED) {
     Serial.print("Attempting to connect to WPA SSID: ");
-    Serial.println(ssid);
+    Serial.print(ssid);
+    Serial.print(" [");
+    Serial.print(password);
+    Serial.println("]");
     // Connect to WPA/WPA2 network
     status = WiFi.begin(ssid, password);
     delay(500);
@@ -100,9 +111,11 @@ void setup()
 
   Serial.println("3 Phase Energy Meter");
 
-  emon1.current(currentPins[0], I_CAL);             // Current: input pin, calibration.
-  emon2.current(currentPins[1], I_CAL);             // Current: input pin, calibration.
-  emon3.current(currentPins[2], I_CAL);             // Current: input pin, calibration.
+  for(int m=0; m<3; m++)
+    emons[m].current(currentPins[m], I_CAL);             // Current: input pin, calibration.
+//  emon1.current(currentPins[0], I_CAL);             // Current: input pin, calibration.
+//  emon2.current(currentPins[1], I_CAL);             // Current: input pin, calibration.
+//  emon3.current(currentPins[2], I_CAL);             // Current: input pin, calibration.
 
   InitWiFi();
 
@@ -111,6 +124,7 @@ void setup()
   delay(1000);
 }
 
+/*
 // Return true if all sensors are idle, false otherwise
 int checkIdle ()
 {
@@ -120,24 +134,23 @@ int checkIdle ()
       return false;
   return true;
 }  
-
+*/
 void readPhase ()      //Method to read information from CTs
 {
   memset(RMSCurrent, 0, 3*sizeof(double));
 
-  if( !checkIdle() ) {
-    RMSCurrent[0] = emon1.calcIrms(SAMPLES);  // Calculate Irms only
-    RMSCurrent[1] = emon2.calcIrms(SAMPLES);  // Calculate Irms only
-    RMSCurrent[2] = emon3.calcIrms(SAMPLES);  // Calculate Irms only
-  }
+  //if( !checkIdle() )
+  for(int m=0; m<3; m++)
+    RMSCurrent[m] = emons[m].calcIrms(SAMPLES);  // Calculate Irms only
+
+//    RMSCurrent[1] = emon2.calcIrms(SAMPLES);  // Calculate Irms only
+//    RMSCurrent[2] = emon3.calcIrms(SAMPLES);  // Calculate Irms only
   
   for(int i=0;i<=2;i++)
   {
     RMSPower[i] = VOLTAGE*RMSCurrent[i];    //Calculates RMS Power Assuming Voltage 220VAC, change to 110VAC accordingly
     if (RMSPower[i] > peakPower[i])
-    {
       peakPower[i] = RMSPower[i];
-    }
     endMillis[i]= millis();
     unsigned long time = (endMillis[i] - startMillis[i]);
     kilos[i] = kilos[i] + (RMSPower[i] * (time/60/60/1000000));    //Calculate kilowatt hours used
