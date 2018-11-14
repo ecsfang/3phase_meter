@@ -12,9 +12,7 @@
 
 const int sclPin =            D1;
 const int sdaPin =            D2;
-const int blinkPin =          D3;
-// Wire ADS1115 ALERT/RDY pin to D4
-const int alertReadyPin =     D0;
+const int blinkPin =          D0;
 
 #define ADS0_A0 1
 #define ADS0_A1 2
@@ -44,20 +42,16 @@ unsigned long delayTime = 1000;
 
 void initAdc(ADS1115& adc) {
   Serial.println("Testing ADC connection...");
-  Serial.println(ADC_BITS);
-  Serial.println(ADC_COUNTS);
   Serial.println(adc.testConnection() ? "ADS1015 connection successful" : "ADS1015 connection failed");
 
-  adc.initialize(); // initialize ADS1015 16 bit A/D chip
+  adc.initialize(); // initialize ADS1015 12 bit A/D chip
   //continuous mode. Data will always be ready
   adc.setMode(ADS1115_MODE_CONTINUOUS);
   //set the gain
   adc.setGain(ADS1115_PGA_4P096);
   //set to max rate
   adc.setRate(ADS1115_RATE_475);
-  adc.setConversionReadyPinMode();
-  adc.showConfigRegister();
- }
+}
 
 void setup() {
     Serial.begin(115200);
@@ -65,7 +59,6 @@ void setup() {
     Serial.println(F("PowerMeter!"));
 
     pinMode(LED_BUILTIN, OUTPUT);
-    pinMode(alertReadyPin,INPUT);
     pinMode(blinkPin, INPUT);
     attachInterrupt(digitalPinToInterrupt(blinkPin), onPulse, FALLING);
 
@@ -97,23 +90,11 @@ void setup() {
                       Adafruit_BME280::FILTER_OFF   );
     }
     
-    if( bHaveDisplay ) {
-      //Send the reset command to the display - this forces the cursor to return to the beginning of the display
-      Wire.beginTransmission(DISPLAY_ADDRESS);
-      Wire.write('v');
-      Wire.endTransmission();
-    }
-    
     if( bHaveADS ) {
       initAdc(adc);
-//      ads.begin();
     }
 
     Serial.println();
-
-//    adc.triggerConversion();
-    checkADC();
-//    testADC();
 
     ct1.inputPinReader = ads1115PinReader; // Replace the default pin reader with the customized ads pin reader
     ct2.inputPinReader = ads1115PinReader;
@@ -125,65 +106,23 @@ void setup() {
     ct1.current(ADS0_A0, 30);
     ct2.current(ADS0_A1, 30);
     ct3.current(ADS0_A2, 30);
-
-    // (ADC input, calibration, phase_shift)
-    //ct1.voltage(ADS1_A0, 240, 1.2);
-    //ct2.voltage(ADS1_A0, 240, 1.2);
-    //ct3.voltage(ADS1_A0, 240, 1.2);
-
-    if( bHaveADS ) {
-//      initAdc(adc);
-      Serial.println("Set gain!");
-      adc.setGain(ADS1115_PGA_4P096);
-    }
 }
 
 bool bBlink = false;
 int blinkCnt = 0;
-
+int tCnt = 0;
 void loop() { 
- /*
   if( bBlink ) {
     Serial.print("Blinks: ");
     Serial.println(blinkCnt);
     bBlink = false;
-    if( bHaveDisplay ) 
-      i2cSendValue(blinkCnt); // Send to display ...
-    delay(50);
-    digitalWrite(LED_BUILTIN, HIGH);
   }
-  if( bHaveBME )
+  if( bHaveBME && (tCnt % 10) == 0)
     printValues();
-*/
+  tCnt++;
   if( bHaveADS )
     checkADC();
   delay(delayTime);
-/*  
- *   
-  // Calculate all. No.of crossings, time-out
-  //ct4.calcVI(20,2000);
-
-  // Print power
-  Serial.println("READ BEGIN");
-  unsigned long start = millis();
-
-  Serial.print("ct1: ");
-  Serial.println( ct1.calcIrms(1480) );
-
-  Serial.print("ct2: ");
-  Serial.println( ct2.calcIrms(1480) );
-
-  Serial.print("ct3: ");
-  Serial.println( ct3.calcIrms(1480) );
-
-  Serial.print("Vrms");
-  Serial.println(ct1.Vrms);
-
-  Serial.print("took ");Serial.print(millis() - start);Serial.println("ms");
-  Serial.println("READ END");
-
-  delay(2000);  
-  **/
 }
 
 // The interrupt routine
@@ -277,15 +216,6 @@ void i2cScan()
   delay(2000);
 }
 
-/** Poll the assigned pin for conversion status 
- */
-void pollAlertReadyPin() {
-  return;
-  for (uint32_t i = 0; i<1000000; i++)
-    if (!digitalRead(alertReadyPin)) return;
-   Serial.println("Failed to wait for AlertReadyPin, it's stuck high!");
-}
-
   // The ADC input range (or gain) can be changed via the following
   // functions, but be careful never to exceed VDD +0.3V max, or to
   // exceed the upper and lower limits if you adjust the input range!
@@ -298,27 +228,16 @@ void pollAlertReadyPin() {
   // ads.setGain(GAIN_FOUR);       // 4x gain   +/- 1.024V  1 bit = 0.5mV    0.03125mV
   // ads.setGain(GAIN_EIGHT);      // 8x gain   +/- 0.512V  1 bit = 0.25mV   0.015625mV
   // ads.setGain(GAIN_SIXTEEN);    // 16x gain  +/- 0.256V  1 bit = 0.125mV  0.0078125mV
-  
+
+unsigned long startMillis=0;
+unsigned long endMillis=0;
+
 void checkADC(void) 
 {
   int16_t adc0, adc1, adc2, adc3;
-/*
-  adc0 = ads.readADC_SingleEnded(0);
-  adc1 = ads.readADC_SingleEnded(1);
-  adc2 = ads.readADC_SingleEnded(2);
-  adc3 = ads.readADC_SingleEnded(3);
-  Serial.print("AIN0: "); Serial.println(adc0);
-  Serial.print("AIN1: "); Serial.println(adc1);
-  Serial.print("AIN2: "); Serial.println(adc2);
-  Serial.print("AIN3: "); Serial.println(adc3);
-  Serial.println(" ");
-  */
-/*
-  adc.setMultiplexer(ADS1115_MUX_P0_NG);
-  adc.triggerConversion();
-  pollAlertReadyPin();
-  Serial.print("A0: "); Serial.print(adc.getMilliVolts(false)); Serial.print("mV\t");
-*/
+
+  digitalWrite(LED_BUILTIN, LOW);
+
   adc0 = ads1115PinReader(ADS0_A0);
   adc1 = ads1115PinReader(ADS0_A1);
   adc2 = ads1115PinReader(ADS0_A2);
@@ -327,101 +246,29 @@ void checkADC(void)
   Serial.print(" AIN1: "); Serial.print(adc1);
   Serial.print(" AIN2: "); Serial.print(adc2);
   Serial.print(" AIN3: "); Serial.println(adc3);
-/*
-  pollAlertReadyPin();
-  adc0 = adc.getConversionP0GND();
-  pollAlertReadyPin();
-  adc1 = adc.getConversionP1GND();
-  pollAlertReadyPin();
-  adc2 = adc.getConversionP3GND();
-  pollAlertReadyPin();
-  adc3 = adc.getConversionP2GND();
-  Serial.print("AIN0: "); Serial.print(adc0);
-  Serial.print(" AIN1: "); Serial.print(adc1);
-  Serial.print(" AIN2: "); Serial.print(adc2);
-  Serial.print(" AIN3: "); Serial.println(adc3);
-*/
+
   Serial.print("ct1: ");
-  Serial.println( ct1.calcIrms(1480) );
+  startMillis = millis();
+  Serial.print( ct1.calcIrms(1480) );
+  endMillis = millis() - startMillis;
+  Serial.print(" - "); Serial.print(endMillis); Serial.println(" ms");
 
   Serial.print("ct2: ");
-  Serial.println( ct2.calcIrms(1480) );
+  startMillis = millis();
+  Serial.print( ct2.calcIrms(1480) );
+  endMillis = millis() - startMillis;
+  Serial.print(" - "); Serial.print(endMillis); Serial.println(" ms");
 
   Serial.print("ct3: ");
-  Serial.println( ct3.calcIrms(1480) );
-/*
-    // Sensor is on P0
-    Serial.print("Sensor 1 ** ");
-    // Set the gain (PGA) +/- 1.024v
-    adc.setGain(ADS1115_PGA_4P096);
+  startMillis = millis();
+  Serial.print( ct3.calcIrms(1480) );
+  endMillis = millis() - startMillis;
+  Serial.print(" - "); Serial.print(endMillis); Serial.println(" ms");
 
-    // Get the number of counts of the accumulator
-    Serial.print("Counts: ");
-    
-    // The below method sets the mux and gets a reading.
-    pollAlertReadyPin();
-    int sensorOneCounts=adc.getConversionP0GND();  // counts up to 16-bits  
-    Serial.print(sensorOneCounts);
-
-    // To turn the counts into a voltage, we can use
-    Serial.print(" --> Voltage: ");
-    Serial.print(sensorOneCounts*adc.getMvPerCount()/1000);
-    Serial.println("V");
-
-    Serial.print("Sensor 2 ** ");
-    // Get the number of counts of the accumulator
-    Serial.print("Counts: ");
-    // The below method sets the mux and gets a reading.
-    pollAlertReadyPin();
-    sensorOneCounts=adc.getConversionP1GND();  // counts up to 16-bits  
-    Serial.print(sensorOneCounts);
-
-    // To turn the counts into a voltage, we can use
-    Serial.print(" --> Voltage: ");
-    Serial.print(sensorOneCounts*adc.getMvPerCount()/1000);
-    Serial.println("V");
-
-    Serial.print("Sensor 3 ** ");
-    // Get the number of counts of the accumulator
-    Serial.print("Counts: ");
-    // The below method sets the mux and gets a reading.
-    pollAlertReadyPin();
-    sensorOneCounts=adc.getConversionP3GND();  // counts up to 16-bits  
-    Serial.print(sensorOneCounts);
-
-    // To turn the counts into a voltage, we can use
-    Serial.print(" --> Voltage: ");
-    Serial.print(sensorOneCounts*adc.getMvPerCount()/1000);
-    Serial.println("V");
-
-    Serial.print("Sensor 4 ** ");
-    // Get the number of counts of the accumulator
-    Serial.print("Counts: ");
-    // The below method sets the mux and gets a reading.
-    pollAlertReadyPin();
-    sensorOneCounts=adc.getConversionP2GND();  // counts up to 16-bits  
-    Serial.print(sensorOneCounts);
-
-    // To turn the counts into a voltage, we can use
-    Serial.print(" --> Voltage: ");
-    Serial.print(sensorOneCounts*adc.getMvPerCount()/1000);
-    Serial.println("V");
- */
-/*  adc0 = adc.getConversionP0GND();
-  adc1 = adc.getConversionP1GND();
-  adc2 = adc.getConversionP2GND();
-  adc3 = adc.getConversionP3GND();
-  
-  Serial.print("AIN0: "); Serial.println(adc0);
-  Serial.print("AIN1: "); Serial.println(adc1);
-  Serial.print("AIN2: "); Serial.println(adc2);
-  Serial.print("AIN3: "); Serial.println(adc3);
-*/
   Serial.println(" ");
+  digitalWrite(LED_BUILTIN, HIGH);
 }
 
-unsigned long startMillis=0;
-unsigned long endMillis=0;
 #define TST_CNT 100
 /*
 void testADC(void)
@@ -433,10 +280,10 @@ void testADC(void)
   startMillis = millis();
 
   for(int i =0; i<TST_CNT; i++) {
-    adc0 = adc.getConversionP0GND(); //ads.readADC_SingleEnded(0);
-    adc1 = adc.getConversionP0GND(); //ads.readADC_SingleEnded(1);
-    adc2 = adc.getConversionP0GND(); //ads.readADC_SingleEnded(2);
-    adc3 = adc.getConversionP0GND(); //ads.readADC_SingleEnded(3);
+    adc0 = adc.getConversionP0GND();
+    adc1 = adc.getConversionP0GND();
+    adc2 = adc.getConversionP0GND();
+    adc3 = adc.getConversionP0GND();
     meas += adc0+adc1+adc2+adc3;
   }
   endMillis = millis() - startMillis;
@@ -448,38 +295,18 @@ void testADC(void)
   Serial.println("");  
 }
 */
-//Given a number, i2cSendValue chops up an integer into four values and sends them out over I2C
-void i2cSendValue(int tempCycles)
-{
-  Wire.beginTransmission(DISPLAY_ADDRESS); // transmit to device at new I2C address
-  Wire.write(tempCycles / 1000); //Send the left most digit
-  tempCycles %= 1000; //Now remove the left most digit from the number we want to display
-  Wire.write(tempCycles / 100);
-  tempCycles %= 100;
-  Wire.write(tempCycles / 10);
-  tempCycles %= 10;
-  Wire.write(tempCycles); //Send the right most digit
-  Wire.endTransmission(); //Stop I2C transmission
-}
 
 // Make a callback method for reading the pin value from the ADS instance
-int ads1115PinReader(int addr){
+int ads1115PinReader(int addr)
+{
   int32_t tmp;
-  // Wait for ADC to be ready ...
-  pollAlertReadyPin();
+
   switch (addr) {
     case ADS0_A0: tmp = adc.getConversionP0GND(); break;
     case ADS0_A1: tmp = adc.getConversionP1GND(); break;
     case ADS0_A2: tmp = adc.getConversionP3GND(); break;
     case ADS0_A3: tmp = adc.getConversionP2GND(); break;
   }
-  switch (addr) {
-    case ADS0_A0: tmp = adc.getConversionP0GND(); break;
-    case ADS0_A1: tmp = adc.getConversionP1GND(); break;
-    case ADS0_A2: tmp = adc.getConversionP3GND(); break;
-    case ADS0_A3: tmp = adc.getConversionP2GND(); break;
-  }
-  //tmp = analogRead(addr);
   //Serial.print(tmp); Serial.print(" -- "); Serial.println(tmp>>6);
   //Serial.print(addr); Serial.print(": "); Serial.println(tmp*ADS1115_MV_6P144 / 5);
 
@@ -487,9 +314,5 @@ int ads1115PinReader(int addr){
   // tmp * ADS1115_MV_6P144 returns a voltage measurement between 0 and 5v
   // emonlib expect a value between 0 an 1024, so convert
   // TODO: we're loosing precision here as it's converted to a 10 bit value. fix this.
-//  return (tmp * ADS1115_MV_6P144 * 1024) / 5000;
-  //return tmp*ADS1115_MV_6P144;
-  //return tmp*ADS1115_MV_1P024;
   return (tmp*adc.getMvPerCount()*1024)/3300; // 0-1024 (where 1024 = 3.3V)
-  //return (tmp*adc.getMvPerCount()*ADC_COUNTS)/3300;
 }
