@@ -41,7 +41,7 @@ int ads1115PinReader(int addr)
 #ifdef MCP3008
 MCP3008 mcp;
 
-void initAdc(MCP3008& adc)
+void initAdc(MCP3008& mcp)
 {
   mcp.begin();
 }
@@ -56,16 +56,14 @@ int mcp3008PinReader(int addr)
   int chan = addr*2;
 
   if( bNeg[addr] )
-    tmp = -mcp.analogReadDifferential(pin+1);
+    tmp = -mcp.analogReadDifferential(chan+1);
   else
-    tmp = mcp.analogReadDifferential(pin);
+    tmp = mcp.analogReadDifferential(chan);
 
   if (tmp == 0)
     bNeg[addr] != bNeg[addr];
 
-  // 333 ohm 0.5mA/A -> 30A = 15mA -> 5V
-  //Serial.print(tmp); Serial.print(" -- "); Serial.println(tmp>>6);
-  //Serial.print(addr); Serial.print(": "); Serial.println(tmp*ADS1115_MV_6P144 / 5);
+  // 333 ohm 0.5mA/A -> 30A = 15mA -> 5V -> tmp = +/- 5v
 
   //calculation:
   // tmp * ADS1115_MV_6P144 returns a voltage measurement between 0 and 5v

@@ -18,13 +18,15 @@ const int sclPin =            D1;
 const int sdaPin =            D2;
 const int blinkPin =          D0;
 
-
 bool bHaveADS = false;
 
 extern ADS1115 adc;
 
+#define NR_OF_PHASES  3
+
 // Create  instances for each CT channel
-EnergyMonitor ct[4]; //ct1, ct2, ct3, ct4;
+EnergyMonitor ct[NR_OF_PHASES];
+int sctPin[NR_OF_PHASES] = { ADS0_A0, ADS0_A1, ADS0_A2 };
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -33,7 +35,6 @@ PubSubClient client(espClient);
 char msg[MSG_LEN];
 
 unsigned long delayTime = 1000;
-
 
 void setup() {
   Serial.begin(115200);
@@ -45,13 +46,11 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(blinkPin), onPulse, FALLING);
 
   for(int i=0; i<16; i++) {
-    digitalWrite(LED_BUILTIN, LOW);  // Off ...
+    digitalWrite(LED_BUILTIN, LOW);  // On ...
     delay(100);
     digitalWrite(LED_BUILTIN, HIGH);  // Off ...
     delay(100);
   }
-
-  bool status;
 
   Wire.begin(sdaPin, sclPin);
 
@@ -71,15 +70,16 @@ void setup() {
 
   Serial.println();
 
-  for (int i = 0; i < 3; i++)
-    ct[i].inputPinReader = ads1115PinReader; // Replace the default pin reader with the customized ads pin reader
-
   // Calibration factor = CT ratio / burden resistance
   // the current constant is the value of current you want to
   // read when 1 V is produced at the analogue input
-  ct[0].current(ADS0_A0, 30);
-  ct[1].current(ADS0_A1, 30);
-  ct[2].current(ADS0_A2, 30);
+  for (int i = 0; i < NR_OF_PHASES; i++) {
+    ct[i].inputPinReader = ads1115PinReader; // Replace the default pin reader with the customized ads pin reader
+    ct[i].current(sctPin[i], 30);
+  }
+
+  ArduinoOTA.setHostname("PowerMeter");
+  ArduinoOTA.setPassword(flashpw);
 
   ArduinoOTA.onStart([]() {
     String type;
@@ -109,9 +109,12 @@ void setup() {
       Serial.println("Receive Failed");
     } else if (error == OTA_END_ERROR) {
       Serial.println("End Failed");
+    } else {
+      Serial.println("Unknown error!");
     }
   });
   ArduinoOTA.begin();
+
   Serial.println("Ready");
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
@@ -146,14 +149,11 @@ int tCnt = 0;
 
 void loop()
 {
-  digitalWrite(LED_BUILTIN, LOW);  // On ...
-  if (!client.connected()) {
+  if (!client.connected())
     reconnect();
-  }
 
-  if (client.connected()) {
+  if (client.connected())
     client.loop();
-  }
 
   ArduinoOTA.handle();
 
@@ -162,17 +162,17 @@ void loop()
     Serial.println(blinkCnt);
     bBlink = false;
   }
-  tCnt++;
+
   if ( bHaveADS )
     read3Phase();
-  digitalWrite(LED_BUILTIN, HIGH);  // Off ...
+
   delay(delayTime);
+  tCnt++;
 }
 
 // The interrupt routine
 void onPulse()
 {
-  digitalWrite(LED_BUILTIN, LOW);
   blinkCnt++;
   bBlink = true;
 }
@@ -278,82 +278,101 @@ bool change(double a, double b, double diff)
   return (a > b ? (a - b) : (b - a)) > diff;
 }
 
-unsigned long startMillis[3];
-unsigned long endMillis[3];
-int RMSPower[3];
-int peakPower[3];
+// Housekeeping ....
+unsigned long startMillis[NR_OF_PHASES];
+unsigned long endMillis[NR_OF_PHASES];
+double        oldIrms[NR_OF_PHASES] = { -99, -99, -99};
+int           oldPower[NR_OF_PHASES] = { -99, -99, -99};
+
+// Current values ...
+double        irms[NR_OF_PHASES];
+int           RMSPower[NR_OF_PHASES];       // Current power (W)
+int           peakPower[NR_OF_PHASES];      // Peak power (per day)
+double        kilos[NR_OF_PHASES];          // Total kWh today (per phase)
+unsigned long todayPower;                   // Todays total
+unsigned long yesterdayPower;               // Yesterdays total
+
+void runAtMidnight(void)
+{
+  yesterdayPower = 0;
+  for ( int c = 0; c < NR_OF_PHASES; c++) {
+    yesterdayPower += (unsigned long)kilos[c];
+    kilos[c] = 0.0;
+    todayPower = 0;
+    peakPower[c] = 0;
+  }
+}
+
+#define SENSOR_PAR_CNT (NR_OF_PHASES*3+1)
+#define BUF_LEN 1024
+
+void sendStatus(void)
+{
+  char    values[BUF_LEN];
+  int     n = 0;
+
+  n = sprintf(values, "VALUES:%ld", todayPower);
+  n += sprintf(values, "%ld;", yesterdayPower);
+  for( int c=0; c<NR_OF_PHASES; c++ )
+    n += sprintf(values, "%.1f;", irms[c]);
+  for( int c=0; c<NR_OF_PHASES; c++ )
+    n += sprintf(values, "%d;", RMSPower[c]);
+  for( int c=0; c<NR_OF_PHASES; c++ )
+    n += sprintf(values, "%.1f;", kilos[c]);
+
+  char *par[SENSOR_PAR_CNT];
+  uint8_t cnt = 0;
+  char *p = strstr(values, ":");
+  while (p && cnt < SENSOR_PAR_CNT) {
+    *(p++) = 0;
+    par[cnt++] = p;
+    p = strchr(p, ';');
+  }
+  
+  // Fill in report in GAUS format
+  String json;
+  json = R"(
+    {
+      "Time": $TIME,
+      "ENERGY": {
+        "Total": $TOTAL,
+        "Yesterday":$YDAY,
+        "Today1": $TODAY_1,
+        "Today2": $TODAY_2,
+        "Today3": $TODAY_3,
+        "Current1": $CURRENT_1,
+        "Current2": $CURRENT_2,
+        "Current3": $CURRENT_3
+        }
+    }
+  )";
+  json.replace("$TIME", "2018-11-27");
+  json.replace("$TOTAL",      par[0]);
+  json.replace("$YDAY",       par[1]);
+  json.replace("$CURRENT_1",  par[2]);
+  json.replace("$CURRENT_2",  par[3]);
+  json.replace("$CURRENT_3",  par[4]);
+  json.replace("$TODAY_1",    par[5]);
+  json.replace("$TODAY_2",    par[6]);
+  json.replace("$TODAY_3",    par[7]);
+}
+
 
 void read3Phase(void)
 {
-  double  irms;
-  double  oldIrms[3] = { -99, -99, -99};
-  int     oldPower[3] = { -99, -99, -99};
-  char    sensor[16];
-
   digitalWrite(LED_BUILTIN, LOW);
 
-  for ( int c = 0; c < 3; c++) {
-    irms = ct[c].calcIrms(1480);
-    if ( change(irms, oldIrms[c], DELTA_AMP ) ) {
-      snprintf(sensor, 16, "phase%d", c + 1);
-      sendMsgF(sensor, irms);
-      oldIrms[c] = irms;
-    }
-    RMSPower[c] = 230*irms;
-    if ( change(RMSPower[c], oldPower[c], DELTA_POW ) ) {
-      snprintf(sensor, 16, "power%d", c + 1);
-      sendMsgI(sensor, RMSPower[c]);
-      oldPower[c] = RMSPower[c];
-    }
+  for ( int c = 0; c < NR_OF_PHASES; c++) {
+    irms[c] = ct[c].calcIrms(1480);
+    RMSPower[c] = 230*irms[c];
+    // Get time since last reading ...
     endMillis[c] = millis();
     unsigned long time = (endMillis[c] - startMillis[c]);
-    startMillis[c] = millis();
+    startMillis[c] = endMillis[c];
+    // How much power has been used ... ?
+    double duration = ((double)time)/(3600000.0); // Time in hours since last reading
+    kilos[c] += RMSPower[c] * duration / 1000; // So many kWh have been used ...
   }
   
   digitalWrite(LED_BUILTIN, HIGH);
 }
-/*
-  void checkADC(void)
-  {
-  int16_t adc0, adc1, adc2, adc3;
-  double  irms;
-
-  digitalWrite(LED_BUILTIN, LOW);
-
-  adc0 = ads1115PinReader(ADS0_A0);
-  adc1 = ads1115PinReader(ADS0_A1);
-  adc2 = ads1115PinReader(ADS0_A2);
-  adc3 = ads1115PinReader(ADS0_A3);
-  Serial.print("AIN0: "); Serial.print(adc0);
-  Serial.print(" AIN1: "); Serial.print(adc1);
-  Serial.print(" AIN2: "); Serial.print(adc2);
-  Serial.print(" AIN3: "); Serial.println(adc3);
-
-  Serial.print("ct1: ");
-  startMillis = millis();
-  irms = ct1.calcIrms(1480);
-  sendMsgF("phase1", irms);
-  Serial.print( irms );
-  endMillis = millis() - startMillis;
-  Serial.print(" - "); Serial.print(endMillis); Serial.println(" ms");
-
-  Serial.print("ct2: ");
-  startMillis = millis();
-  irms = ct2.calcIrms(1480);
-  sendMsgF("phase2", irms);
-  Serial.print( irms );
-  endMillis = millis() - startMillis;
-  Serial.print(" - "); Serial.print(endMillis); Serial.println(" ms");
-
-  Serial.print("ct3: ");
-  startMillis = millis();
-  irms = ct3.calcIrms(1480);
-  sendMsgF("phase3", irms);
-  Serial.print( irms );
-  endMillis = millis() - startMillis;
-  Serial.print(" - "); Serial.print(endMillis); Serial.println(" ms");
-
-  Serial.println(" ");
-  digitalWrite(LED_BUILTIN, HIGH);
-  }
-**/
