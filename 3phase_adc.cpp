@@ -1,8 +1,7 @@
 #include "3phase_adc.h"
 
-
+#ifdef ADS1015
 ADS1115 adc(ADS1115_ADDRESS_ADDR_GND);
-
 
 void initAdc(ADS1115& adc) {
   Serial.println("Testing ADC connection...");
@@ -37,3 +36,41 @@ int ads1115PinReader(int addr)
   // TODO: we're loosing precision here as it's converted to a 10 bit value. fix this.
   return (tmp*adc.getMvPerCount()*1024)/3300; // 0-1024 (where 1024 = 3.3V)
 }
+#endif
+
+#ifdef MCP3008
+MCP3008 mcp;
+
+void initAdc(MCP3008& adc)
+{
+  mcp.begin();
+}
+
+bool bNeg[3];
+
+// Make a callback method for reading the pin value from the ADS instance
+int mcp3008PinReader(int addr)
+{
+  int32_t tmp;
+
+  int chan = addr*2;
+
+  if( bNeg[addr] )
+    tmp = -mcp.analogReadDifferential(pin+1);
+  else
+    tmp = mcp.analogReadDifferential(pin);
+
+  if (tmp == 0)
+    bNeg[addr] != bNeg[addr];
+
+  // 333 ohm 0.5mA/A -> 30A = 15mA -> 5V
+  //Serial.print(tmp); Serial.print(" -- "); Serial.println(tmp>>6);
+  //Serial.print(addr); Serial.print(": "); Serial.println(tmp*ADS1115_MV_6P144 / 5);
+
+  //calculation:
+  // tmp * ADS1115_MV_6P144 returns a voltage measurement between 0 and 5v
+  // emonlib expect a value between 0 an 1024, so convert
+  // TODO: we're loosing precision here as it's converted to a 10 bit value. fix this.
+//  return (tmp*adc.getMvPerCount()*1024)/3300; // 0-1024 (where 1024 = 3.3V)
+}
+#endif

@@ -3,7 +3,6 @@
  ***************************************************************************/
 #include <Wire.h>
 #include <SPI.h>
-#include <Adafruit_Sensor.h>
 #include "3phase_adc.h"
 
 #include <ESP8266WiFi.h>
@@ -247,9 +246,15 @@ void sendMsgF(const char *topic, double v)
   snprintf (buf, 32, "%.2f", v);
   sendMsg(topic, buf);
 }
+void sendMsgI(const char *topic, int v)
+{
+  char buf[32];
+  snprintf (buf, 32, "%d", v);
+  sendMsg(topic, buf);
+}
 
-unsigned long startMillis = 0;
-unsigned long endMillis = 0;
+//unsigned long startMillis = 0;
+//unsigned long endMillis = 0;
 
 // The ADC input range (or gain) can be changed via the following
 // functions, but be careful never to exceed VDD +0.3V max, or to
@@ -265,30 +270,46 @@ unsigned long endMillis = 0;
 // ads.setGain(GAIN_SIXTEEN);    // 16x gain  +/- 0.256V  1 bit = 0.125mV  0.0078125mV
 
 #define DELTA_AMP 0.1
+#define DELTA_POW 50
 
 // Return true if change is big enough to report
-bool change(double a, double b)
+bool change(double a, double b, double diff)
 {
-  return (a > b ? (a - b) : (b - a)) > DELTA_AMP;
+  return (a > b ? (a - b) : (b - a)) > diff;
 }
+
+unsigned long startMillis[3];
+unsigned long endMillis[3];
+int RMSPower[3];
+int peakPower[3];
 
 void read3Phase(void)
 {
   double  irms;
   double  oldIrms[3] = { -99, -99, -99};
+  int     oldPower[3] = { -99, -99, -99};
   char    sensor[16];
 
   digitalWrite(LED_BUILTIN, LOW);
 
   for ( int c = 0; c < 3; c++) {
     irms = ct[c].calcIrms(1480);
-    if ( change(irms, oldIrms[c] ) ) {
+    if ( change(irms, oldIrms[c], DELTA_AMP ) ) {
       snprintf(sensor, 16, "phase%d", c + 1);
       sendMsgF(sensor, irms);
       oldIrms[c] = irms;
     }
+    RMSPower[c] = 230*irms;
+    if ( change(RMSPower[c], oldPower[c], DELTA_POW ) ) {
+      snprintf(sensor, 16, "power%d", c + 1);
+      sendMsgI(sensor, RMSPower[c]);
+      oldPower[c] = RMSPower[c];
+    }
+    endMillis[c] = millis();
+    unsigned long time = (endMillis[c] - startMillis[c]);
+    startMillis[c] = millis();
   }
-
+  
   digitalWrite(LED_BUILTIN, HIGH);
 }
 /*
