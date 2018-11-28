@@ -20,13 +20,14 @@ const int blinkPin =          D0;
 
 bool bHaveADS = false;
 
-extern ADS1115 adc;
+//extern ADS1115 adc;
 
 #define NR_OF_PHASES  3
 
 // Create  instances for each CT channel
 EnergyMonitor ct[NR_OF_PHASES];
-int sctPin[NR_OF_PHASES] = { ADS0_A0, ADS0_A1, ADS0_A2 };
+
+int sctPin[NR_OF_PHASES] = { ADS_A0, ADS_A1, ADS_A2 };
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -62,11 +63,15 @@ void setup() {
     ESP.restart();
   }
 
+#ifdef USE_ADS1015
   i2cScan();
 
   if ( bHaveADS ) {
-    initAdc(adc);
+    initAdc();
   }
+#else
+  initAdc();
+#endif
 
   Serial.println();
 
@@ -74,11 +79,16 @@ void setup() {
   // the current constant is the value of current you want to
   // read when 1 V is produced at the analogue input
   for (int i = 0; i < NR_OF_PHASES; i++) {
-    ct[i].inputPinReader = ads1115PinReader; // Replace the default pin reader with the customized ads pin reader
+    ct[i].inputPinReader = adcPinReader; // Replace the default pin reader with the customized ads pin reader
     ct[i].current(sctPin[i], 30);
   }
 
-  ArduinoOTA.setHostname("PowerMeter");
+#ifdef USE_ADS1015
+  ArduinoOTA.setHostname("PowerMeterADS");
+#endif
+#ifdef USE_MCP3008
+  ArduinoOTA.setHostname("PowerMeterMCP");
+#endif
   ArduinoOTA.setPassword(flashpw);
 
   ArduinoOTA.onStart([]() {
@@ -130,7 +140,7 @@ void reconnect() {
 #endif
     // Attempt to connect
     if (client.connect("thePowerMeter")) {
-      Serial.println("connected");
+      Serial.println("Connected!");
       // Once connected, publish an announcement...
       client.publish("powerMeter", "ready");
     } else {
@@ -163,10 +173,8 @@ void loop()
     bBlink = false;
   }
 
-  if ( bHaveADS ) {
-    read3Phase();
-    sendStatus();
-  }
+  read3Phase();
+  sendStatus();
 
   delay(delayTime);
   tCnt++;
@@ -179,6 +187,7 @@ void onPulse()
   bBlink = true;
 }
 
+#ifdef USE_ADS1015
 void i2cScan()
 {
   byte error, address;
@@ -231,6 +240,7 @@ void i2cScan()
 
   delay(2000);
 }
+#endif
 
 void sendMsg(const char *topic, const char *m)
 {
@@ -288,8 +298,8 @@ int           oldPower[NR_OF_PHASES] = { -99, -99, -99};
 
 // Current values ...
 double        irms[NR_OF_PHASES];
-int           RMSPower[NR_OF_PHASES];       // Current power (W)
-int           peakPower[NR_OF_PHASES];      // Peak power (per day)
+unsigned long RMSPower[NR_OF_PHASES];       // Current power (W)
+unsigned long peakPower[NR_OF_PHASES];      // Peak power (per day)
 double        kilos[NR_OF_PHASES];          // Total kWh today (per phase)
 unsigned long todayPower;                   // Todays total
 unsigned long yesterdayPower;               // Yesterdays total
@@ -305,7 +315,7 @@ void runAtMidnight(void)
   }
 }
 
-#define SENSOR_PAR_CNT (NR_OF_PHASES*3+1)
+#define SENSOR_PAR_CNT (NR_OF_PHASES*4+2)
 #define BUF_LEN 1024
 
 void sendStatus(void)
@@ -313,14 +323,16 @@ void sendStatus(void)
   char    values[BUF_LEN];
   int     n = 0;
 
-  n = sprintf(values, "VALUES:%ld", todayPower);
-  n += sprintf(values, "%ld;", yesterdayPower);
+  n = sprintf(values, "VALUES:%ld;", todayPower);
+  n += sprintf(values+n, "%ld;", yesterdayPower);
   for( int c=0; c<NR_OF_PHASES; c++ )
-    n += sprintf(values, "%.1f;", irms[c]);
+    n += sprintf(values+n, "%.1f;", irms[c]);
   for( int c=0; c<NR_OF_PHASES; c++ )
-    n += sprintf(values, "%d;", RMSPower[c]);
+    n += sprintf(values+n, "%d;", RMSPower[c]);
   for( int c=0; c<NR_OF_PHASES; c++ )
-    n += sprintf(values, "%.1f;", kilos[c]);
+    n += sprintf(values+n, "%.1f;", kilos[c]);
+  for( int c=0; c<NR_OF_PHASES; c++ )
+    n += sprintf(values+n, "%d;", peakPower[c]);
 
   char *par[SENSOR_PAR_CNT];
   uint8_t cnt = 0;
@@ -344,7 +356,13 @@ void sendStatus(void)
         "Today3": $TODAY_3,
         "Current1": $CURRENT_1,
         "Current2": $CURRENT_2,
-        "Current3": $CURRENT_3
+        "Current3": $CURRENT_3,
+        "Power1": $POWER_1,
+        "Power2": $POWER_2,
+        "Power3": $POWER_3,
+        "Peak1": $PEAK_1,
+        "Peak2": $PEAK_2,
+        "Peak3": $PEAK_3
         }
     }
   )";
@@ -354,9 +372,15 @@ void sendStatus(void)
   json.replace("$CURRENT_1",  par[2]);
   json.replace("$CURRENT_2",  par[3]);
   json.replace("$CURRENT_3",  par[4]);
-  json.replace("$TODAY_1",    par[5]);
-  json.replace("$TODAY_2",    par[6]);
-  json.replace("$TODAY_3",    par[7]);
+  json.replace("$POWER_1",    par[5]);
+  json.replace("$POWER_2",    par[6]);
+  json.replace("$POWER_3",    par[7]);
+  json.replace("$TODAY_1",    par[8]);
+  json.replace("$TODAY_2",    par[9]);
+  json.replace("$TODAY_3",    par[10]);
+  json.replace("$PEAK_1",     par[11]);
+  json.replace("$PEAK_2",     par[12]);
+  json.replace("$PEAK_3",     par[13]);
 
   Serial.println( json );
 }
@@ -369,6 +393,8 @@ void read3Phase(void)
   for ( int c = 0; c < NR_OF_PHASES; c++) {
     irms[c] = ct[c].calcIrms(1480);
     RMSPower[c] = 230*irms[c];
+    if( RMSPower[c] > peakPower[c] )
+      peakPower[c] = RMSPower[c];
     // Get time since last reading ...
     endMillis[c] = millis();
     unsigned long time = (endMillis[c] - startMillis[c]);
@@ -377,6 +403,5 @@ void read3Phase(void)
     double duration = ((double)time)/(3600000.0); // Time in hours since last reading
     kilos[c] += RMSPower[c] * duration / 1000; // So many kWh have been used ...
   }
-  
   digitalWrite(LED_BUILTIN, HIGH);
 }

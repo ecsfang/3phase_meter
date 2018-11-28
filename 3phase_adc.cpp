@@ -1,9 +1,9 @@
 #include "3phase_adc.h"
 
-#ifdef ADS1015
+#ifdef USE_ADS1015
 ADS1115 adc(ADS1115_ADDRESS_ADDR_GND);
 
-void initAdc(ADS1115& adc) {
+void initAdc(void) {
   Serial.println("Testing ADC connection...");
   Serial.println(adc.testConnection() ? "ADS1015 connection successful" : "ADS1015 connection failed");
 
@@ -17,15 +17,15 @@ void initAdc(ADS1115& adc) {
 }
 
 // Make a callback method for reading the pin value from the ADS instance
-int ads1115PinReader(int addr)
+int adcPinReader(int addr)
 {
   int32_t tmp;
 
   switch (addr) {
-    case ADS0_A0: tmp = adc.getConversionP0GND(); break;
-    case ADS0_A1: tmp = adc.getConversionP1GND(); break;
-    case ADS0_A2: tmp = adc.getConversionP3GND(); break;
-    case ADS0_A3: tmp = adc.getConversionP2GND(); break;
+    case ADS_A0: tmp = adc.getConversionP0GND(); break;
+    case ADS_A1: tmp = adc.getConversionP1GND(); break;
+    case ADS_A2: tmp = adc.getConversionP3GND(); break;
+    case ADS_A3: tmp = adc.getConversionP2GND(); break;
   }
   //Serial.print(tmp); Serial.print(" -- "); Serial.println(tmp>>6);
   //Serial.print(addr); Serial.print(": "); Serial.println(tmp*ADS1115_MV_6P144 / 5);
@@ -38,7 +38,7 @@ int ads1115PinReader(int addr)
 }
 #endif
 
-#ifdef MCP3008
+#ifdef USE_MCP3008
 MCP3008 mcp;
 
 void initAdc(void)
@@ -49,7 +49,7 @@ void initAdc(void)
 bool bNeg[3];
 
 // Make a callback method for reading the pin value from the ADS instance
-int mcp3008PinReader(int addr)
+int adcPinReader(int addr)
 {
   int32_t tmp;
 
@@ -70,5 +70,6 @@ int mcp3008PinReader(int addr)
   // emonlib expect a value between 0 an 1024, so convert
   // TODO: we're loosing precision here as it's converted to a 10 bit value. fix this.
 //  return (tmp*adc.getMvPerCount()*1024)/3300; // 0-1024 (where 1024 = 3.3V)
+  return tmp*1110/2000;
 }
 #endif
