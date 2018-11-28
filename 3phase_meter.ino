@@ -163,8 +163,10 @@ void loop()
     bBlink = false;
   }
 
-  if ( bHaveADS )
+  if ( bHaveADS ) {
     read3Phase();
+    sendStatus();
+  }
 
   delay(delayTime);
   tCnt++;
@@ -355,6 +357,8 @@ void sendStatus(void)
   json.replace("$TODAY_1",    par[5]);
   json.replace("$TODAY_2",    par[6]);
   json.replace("$TODAY_3",    par[7]);
+
+  Serial.println( json );
 }
 
 

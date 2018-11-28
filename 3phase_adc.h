@@ -1,5 +1,5 @@
-#define ADS1015
-//#define MCP3008
+//#define ADS1015
+#define MCP3008
 
 #ifdef ADS1015
 #include <Adafruit_Sensor.h>
@@ -21,6 +21,6 @@ int ads1115PinReader(int addr);
 #endif
 
 #ifdef MCP3008
-void initAdc(MCP3008& adc);
+void initAdc(void);
 int mcp3008PinReader(int addr);
 #endif

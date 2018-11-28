@@ -41,7 +41,7 @@ int ads1115PinReader(int addr)
 #ifdef MCP3008
 MCP3008 mcp;
 
-void initAdc(MCP3008& mcp)
+void initAdc(void)
 {
   mcp.begin();
 }
