@@ -21,10 +21,11 @@ int adcPinReader(int addr);
 #endif
 
 #ifdef USE_MCP3008
-#define ADS_A0 0
-#define ADS_A1 1
-#define ADS_A2 2
-#define ADS_A3 3
+#define ADS_A0 5
+#define ADS_A1 6
+#define ADS_A2 7
+//#define ADS_A3 3
 void initAdc(void);
 int adcPinReader(int addr);
+void testADC(void);
 #endif

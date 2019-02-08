@@ -53,6 +53,23 @@ int adcPinReader(int addr)
 {
   int32_t tmp;
 
+  tmp = mcp.analogRead(addr);
+
+  // tmp = (5V/2 +/- 1V -> ca 1.5 -> 3.5 V)
+  // --> 310 -> 715
+  //calculation:
+  // tmp * ADS1115_MV_6P144 returns a voltage measurement between 0 and 5v
+  // emonlib expect a value between 0 an 1024, so convert
+  // TODO: we're loosing precision here as it's converted to a 10 bit value. fix this.
+//  return (tmp*adc.getMvPerCount()*1024)/3300; // 0-1024 (where 1024 = 3.3V)
+  return tmp; // 1024 = 5V
+}
+
+// Make a callback method for reading the pin value from the ADS instance
+int adcPinReaderDiff(int addr)
+{
+  int32_t tmp;
+
   int chan = addr*2;
 
   if( bNeg[addr] )
@@ -72,4 +89,24 @@ int adcPinReader(int addr)
 //  return (tmp*adc.getMvPerCount()*1024)/3300; // 0-1024 (where 1024 = 3.3V)
   return tmp*1110/2000;
 }
+
+void testADC(void)
+{
+  for (size_t i = 0; i < mcp.numChannels(); ++i)
+  {
+    Serial.print(mcp.analogRead(i));
+    
+    if (i == mcp.numChannels() - 1)
+    {
+      Serial.println();
+    }
+    else
+    {
+      Serial.print(",");
+    }
+  }
+
+  delay(10);
+}
+
 #endif

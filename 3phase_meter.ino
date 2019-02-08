@@ -22,6 +22,7 @@ bool bHaveADS = false;
 
 //extern ADS1115 adc;
 
+//#define USE_MQTT
 #define NR_OF_PHASES  3
 
 // Create  instances for each CT channel
@@ -39,7 +40,7 @@ unsigned long delayTime = 1000;
 
 void setup() {
   Serial.begin(115200);
-  delay(1000);
+  delay(2500);
   Serial.println(F("PowerMeter!"));
 
   pinMode(LED_BUILTIN, OUTPUT);
@@ -128,8 +129,9 @@ void setup() {
   Serial.println("Ready");
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
-
+#ifdef USE_MQTT
   client.setServer(mqtt_server, 1883);
+#endif
 }
 
 void reconnect() {
@@ -159,11 +161,13 @@ int tCnt = 0;
 
 void loop()
 {
+#ifdef USE_MQTT
   if (!client.connected())
     reconnect();
 
   if (client.connected())
     client.loop();
+#endif
 
   ArduinoOTA.handle();
 
@@ -173,6 +177,7 @@ void loop()
     bBlink = false;
   }
 
+//  testADC();
   read3Phase();
   sendStatus();
 
