@@ -22,5 +22,5 @@ Some libraries are needed as well:
 * PubSubClient - to be able to use MQTT
 * EmonLib - For current and power calculations
 
-Note that the EmonLib shoudl be updated to read from an external ADC.<br>
-(Should update with a link or check-in the changes ...)
+Note that the EmonLib should be updated to read from an external ADC.<br>
+(TBD: Should update with a link or check-in the changes ...)
