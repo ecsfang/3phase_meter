@@ -9,12 +9,12 @@ Some resources:
 Note that a file "mySSID.h" should be created. It only contains some IDs and 
 passwords and should not be checked in.
 
-<code>
-  char *ssid="The SSID to connect to";<br>
-  char *password="The password to use";<br>
-  char *mqtt_server="192.xxx.xxx.xxx";<br>
+<pre>
+  char *ssid="The SSID to connect to";
+  char *password="The password to use";
+  char *mqtt_server="192.xxx.xxx.xxx";
   char *flashpw="Password to use when flashing OTA";
-</code>
+</pre>
 
 Some libraries are needed as well:
 
