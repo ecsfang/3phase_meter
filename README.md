@@ -9,10 +9,12 @@ Some resources:
 Note that a file "mySSID.h" should be created. It only contains some IDs and 
 passwords and should not be checked in.
 
+<code>
   char *ssid="The SSID to connect to";
   char *password="The password to use";
   char *mqtt_server="192.xxx.xxx.xxx";
   char *flashpw="Password to use when flashing OTA";
+</code>
 
 Some libraries are needed as well:
 
@@ -20,5 +22,5 @@ Some libraries are needed as well:
 * PubSubClient - to be able to use MQTT
 * EmonLib - For current and power calculations
 
-Note that the EmonLib shoudl be updated to read from an external ADC.
+Note that the EmonLib shoudl be updated to read from an external ADC.<br>
 (Should update with a link or check-in the changes ...)
