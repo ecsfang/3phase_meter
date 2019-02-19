@@ -31,6 +31,7 @@ const int sdaPin =            D2;
 const int blinkPin =          D0;
 #endif
 
+#define USE_MQTT
 #define NR_OF_PHASES  3
 #define MAX_CURRENT   30
 
@@ -90,7 +91,7 @@ uint32_t now_ms, now_us;
 
 void setup() {
   Serial.begin(115200);
-  delay(1000);
+  delay(2500);
   Serial.println(F("PowerMeter!"));
 
   settimeofday_cb(time_is_set);
@@ -179,7 +180,9 @@ void setup() {
   configTime(TZ_SEC, DST_SEC, "pool.ntp.org");
   // don't wait, observe time changing when ntp timestamp is received
   
+#ifdef USE_MQTT
   client.setServer(mqtt_server, 1883);
+#endif
   running = true;
 }
 
@@ -210,11 +213,13 @@ int tCnt = 0;
 
 void loop()
 {
+#ifdef USE_MQTT
   if (!client.connected())
     reconnect();
 
   if (client.connected())
     client.loop();
+#endif
 
   ArduinoOTA.handle();
 
@@ -273,6 +278,7 @@ void loop()
     bBlink = false;
   }
 
+//  testADC();
   read3Phase();
 
   if (running && ((millis() - statusStart) >= STATUS_TIME)) {

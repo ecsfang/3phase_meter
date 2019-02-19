@@ -104,7 +104,7 @@ void initAdc(void)
 
 bool bNeg[3];
 
-#define USE_DIFFERENTIAL
+//#define USE_DIFFERENTIAL
 
 // Make a callback method for reading the pin value from the ADS instance
 int adcPinReader(int addr)
@@ -133,4 +133,24 @@ int adcPinReader(int addr)
 //  return (tmp*adc.getMvPerCount()*1024)/3300; // 0-1024 (where 1024 = 3.3V)
   return tmp*1110/2000;
 }
+
+void testADC(void)
+{
+  for (size_t i = 0; i < mcp.numChannels(); ++i)
+  {
+    Serial.print(mcp.analogRead(i));
+    
+    if (i == mcp.numChannels() - 1)
+    {
+      Serial.println();
+    }
+    else
+    {
+      Serial.print(",");
+    }
+  }
+
+  delay(10);
+}
+
 #endif

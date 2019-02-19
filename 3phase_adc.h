@@ -27,4 +27,5 @@ int adcPinReader(int addr);
 #define ADC_CH3 4
 void initAdc(void);
 int adcPinReader(int addr);
+void testADC(void);
 #endif
