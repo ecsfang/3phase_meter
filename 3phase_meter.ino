@@ -11,23 +11,37 @@
 #include <ArduinoOTA.h>
 #include <PubSubClient.h>
 
+#include <time.h>                       // time() ctime()
+#include <sys/time.h>                   // struct timeval
+#include <coredecls.h>                  // settimeofday_cb()
+
 #include "mySSID.h"
 #include "EmonLib.h"
 
+const char* otaHost = "PowerMeterOTA";
+const char* mqttClient = "PowerMeterJN";
+
+#define RX_DEBUG
+#define USE_BLINK_INTERRUPT
+
 const int sclPin =            D1;
 const int sdaPin =            D2;
+
+#ifdef USE_BLINK_INTERRUPT
 const int blinkPin =          D0;
-
-bool bHaveADS = false;
-
-//extern ADS1115 adc;
+#endif
 
 #define NR_OF_PHASES  3
+#define MAX_CURRENT   30
+
+bool running = false;
+long statusStart = 0L;
+#define STATUS_TIME (1000*15) // (1000*60*5) // 5 minutes ...
 
 // Create  instances for each CT channel
 EnergyMonitor ct[NR_OF_PHASES];
 
-int sctPin[NR_OF_PHASES] = { ADS_A0, ADS_A1, ADS_A2 };
+int sctPin[NR_OF_PHASES] = { ADC_CH0, ADC_CH1, ADC_CH2 };
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -37,15 +51,58 @@ char msg[MSG_LEN];
 
 unsigned long delayTime = 1000;
 
+#define TZ              1       // (utc+) TZ in hours
+#define DST_MN          0 //60      // use 60mn for summer time in some countries
+
+////////////////////////////////////////////////////////
+
+#define TZ_MN           ((TZ)*60)
+#define TZ_SEC          ((TZ)*3600)
+#define DST_SEC         ((DST_MN)*60)
+
+timeval cbtime;      // time set in callback
+bool cbtime_set = false;
+
+void time_is_set(void) {
+  gettimeofday(&cbtime, NULL);
+  cbtime_set = true;
+  Serial.println("------------------ settimeofday() was called ------------------");
+}
+
+// for testing purpose:
+extern "C" int clock_gettime(clockid_t unused, struct timespec *tp);
+
+#define PTM(w) \
+  Serial.print(":" #w "="); \
+  Serial.print(tm->tm_##w);
+
+void printTm(const char* what, const tm* tm) {
+  Serial.print(what);
+  PTM(isdst); PTM(yday); PTM(wday);
+  PTM(year);  PTM(mon);  PTM(mday);
+  PTM(hour);  PTM(min);  PTM(sec);
+}
+
+timeval tv;
+timespec tp;
+time_t now;
+uint32_t now_ms, now_us;
+
 void setup() {
   Serial.begin(115200);
   delay(1000);
   Serial.println(F("PowerMeter!"));
 
+  settimeofday_cb(time_is_set);
+
   pinMode(LED_BUILTIN, OUTPUT);
+
+#ifdef USE_BLINK_INTERRUPT
   pinMode(blinkPin, INPUT);
   attachInterrupt(digitalPinToInterrupt(blinkPin), onPulse, FALLING);
+#endif
 
+  Serial.println(F("Blink LEDs ..."));
   for(int i=0; i<16; i++) {
     digitalWrite(LED_BUILTIN, LOW);  // On ...
     delay(100);
@@ -53,6 +110,7 @@ void setup() {
     delay(100);
   }
 
+  Serial.println(F("Init Wire ..."));
   Wire.begin(sdaPin, sclPin);
 
   WiFi.mode(WIFI_STA);
@@ -63,15 +121,7 @@ void setup() {
     ESP.restart();
   }
 
-#ifdef USE_ADS1015
-  i2cScan();
-
-  if ( bHaveADS ) {
-    initAdc();
-  }
-#else
   initAdc();
-#endif
 
   Serial.println();
 
@@ -80,15 +130,12 @@ void setup() {
   // read when 1 V is produced at the analogue input
   for (int i = 0; i < NR_OF_PHASES; i++) {
     ct[i].inputPinReader = adcPinReader; // Replace the default pin reader with the customized ads pin reader
-    ct[i].current(sctPin[i], 30);
+    ct[i].current(sctPin[i], MAX_CURRENT);
   }
 
-#ifdef USE_ADS1015
-  ArduinoOTA.setHostname("PowerMeterADS");
-#endif
-#ifdef USE_MCP3008
-  ArduinoOTA.setHostname("PowerMeterMCP");
-#endif
+  Serial.println(F("Init OTA ..."));
+
+  ArduinoOTA.setHostname(otaHost);
   ArduinoOTA.setPassword(flashpw);
 
   ArduinoOTA.onStart([]() {
@@ -129,7 +176,11 @@ void setup() {
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 
+  configTime(TZ_SEC, DST_SEC, "pool.ntp.org");
+  // don't wait, observe time changing when ntp timestamp is received
+  
   client.setServer(mqtt_server, 1883);
+  running = true;
 }
 
 void reconnect() {
@@ -139,7 +190,7 @@ void reconnect() {
     Serial.print("Attempting another MQTT connection...");
 #endif
     // Attempt to connect
-    if (client.connect("thePowerMeter")) {
+    if (client.connect(mqttClient)) {
       Serial.println("Connected!");
       // Once connected, publish an announcement...
       client.publish("powerMeter", "ready");
@@ -167,6 +218,55 @@ void loop()
 
   ArduinoOTA.handle();
 
+  gettimeofday(&tv, nullptr);
+  clock_gettime(0, &tp);
+  now = time(nullptr);
+  now_ms = millis();
+  now_us = micros();
+/**
+  // localtime / gmtime every second change
+  static time_t lastv = 0;
+  if (lastv != tv.tv_sec) {
+    lastv = tv.tv_sec;
+    Serial.println();
+    printTm("localtime", localtime(&now));
+    Serial.println();
+    printTm("gmtime   ", gmtime(&now));
+    Serial.println();
+    Serial.println();
+  }
+
+  // time from boot
+  Serial.print("clock:");
+  Serial.print((uint32_t)tp.tv_sec);
+  Serial.print("/");
+  Serial.print((uint32_t)tp.tv_nsec);
+  Serial.print("ns");
+
+  // time from boot0
+  Serial.print(" millis:");
+  Serial.print(now_ms);
+  Serial.print(" micros:");
+  Serial.print(now_us);
+
+  // EPOCH+tz+dst
+  Serial.print(" gtod:");
+  Serial.print((uint32_t)tv.tv_sec);
+  Serial.print("/");
+  Serial.print((uint32_t)tv.tv_usec);
+  Serial.print("us");
+
+  // EPOCH+tz+dst
+  Serial.print(" time:");
+  Serial.print((uint32_t)now);
+
+  // human readable
+  Serial.print(" ctime:(UTC+");
+  Serial.print((uint32_t)(TZ * 60 + DST_MN));
+  Serial.print("mn)");
+  Serial.print(ctime(&now));
+***************************************/
+
   if ( bBlink ) {
     Serial.print("Blinks: ");
     Serial.println(blinkCnt);
@@ -174,8 +274,14 @@ void loop()
   }
 
   read3Phase();
-  sendStatus();
 
+  if (running && ((millis() - statusStart) >= STATUS_TIME)) {
+    statusStart += STATUS_TIME; // this prevents drift in the delays
+
+    Serial.println(F("Send status ..."));
+    sendStatus();
+  }
+  
   delay(delayTime);
   tCnt++;
 }
@@ -187,60 +293,6 @@ void onPulse()
   bBlink = true;
 }
 
-#ifdef USE_ADS1015
-void i2cScan()
-{
-  byte error, address;
-  int nDevices;
-
-  Serial.println("Scanning...");
-
-  nDevices = 0;
-  for (address = 1; address < 127; address++)
-  {
-    // The i2c scanner uses the return value of
-    // the Write.endTransmisstion to see if
-    // a device did acknowledge to the address.
-    Wire.beginTransmission(address);
-    error = Wire.endTransmission();
-
-    if (error == 0)
-    {
-      Serial.print("I2C device found at address 0x");
-      if (address < 16) {
-        Serial.print("0");
-      }
-      Serial.print(address, HEX);
-      switch ( address ) {
-        case ADS1115_ADDRESS_ADDR_GND:
-          Serial.print(" [ADS]");
-          bHaveADS = true;
-          break;
-      }
-      Serial.println(" !");
-      nDevices++;
-    }
-    else if (error == 4)
-    {
-      Serial.print("Unknown error at address 0x");
-      if (address < 16) {
-        Serial.print("0");
-      }
-      Serial.println(address, HEX);
-    }
-  }
-  if (nDevices == 0) {
-    Serial.println("No I2C devices found\n");
-  }
-  else {
-    Serial.print("Done! ");
-    Serial.print(nDevices);
-    Serial.println(" devices found.\n");
-  }
-
-  delay(2000);
-}
-#endif
 
 void sendMsg(const char *topic, const char *m)
 {
@@ -299,6 +351,7 @@ int           oldPower[NR_OF_PHASES] = { -99, -99, -99};
 // Current values ...
 double        irms[NR_OF_PHASES];
 unsigned long RMSPower[NR_OF_PHASES];       // Current power (W)
+unsigned long peakCurrent[NR_OF_PHASES];    // Peak current (per day)
 unsigned long peakPower[NR_OF_PHASES];      // Peak power (per day)
 double        kilos[NR_OF_PHASES];          // Total kWh today (per phase)
 unsigned long todayPower;                   // Todays total
@@ -325,14 +378,23 @@ void sendStatus(void)
 
   n = sprintf(values, "VALUES:%ld;", todayPower);
   n += sprintf(values+n, "%ld;", yesterdayPower);
-  for( int c=0; c<NR_OF_PHASES; c++ )
-    n += sprintf(values+n, "%.1f;", irms[c]);
+  for( int c=0; c<NR_OF_PHASES; c++ ) {
+    dtostrf(irms[0],1,1,values+n);
+    n = strlen(values);
+    n += sprintf(values+n, ";");
+  }
   for( int c=0; c<NR_OF_PHASES; c++ )
     n += sprintf(values+n, "%d;", RMSPower[c]);
-  for( int c=0; c<NR_OF_PHASES; c++ )
-    n += sprintf(values+n, "%.1f;", kilos[c]);
-  for( int c=0; c<NR_OF_PHASES; c++ )
-    n += sprintf(values+n, "%d;", peakPower[c]);
+  for( int c=0; c<NR_OF_PHASES; c++ ) {
+    dtostrf(kilos[0],1,1,values+n);
+    n = strlen(values);
+    n += sprintf(values+n, ";");
+  }
+  for( int c=0; c<NR_OF_PHASES; c++ ) {
+    dtostrf(peakPower[0],1,1,values+n);
+    n = strlen(values);
+    n += sprintf(values+n, ";");
+  }
 
   char *par[SENSOR_PAR_CNT];
   uint8_t cnt = 0;
@@ -343,7 +405,7 @@ void sendStatus(void)
     p = strchr(p, ';');
   }
   
-  // Fill in report in GAUS format
+  // Fill in report
   String json;
   json = R"(
     {
@@ -366,7 +428,11 @@ void sendStatus(void)
         }
     }
   )";
-  json.replace("$TIME", "2018-11-27");
+
+  tm *ptm = localtime(&now);
+  sprintf(msg, "%d-%02d-%02d", ptm->tm_year+1900, ptm->tm_mon+1, ptm->tm_mday);
+  
+  json.replace("$TIME",       msg);
   json.replace("$TOTAL",      par[0]);
   json.replace("$YDAY",       par[1]);
   json.replace("$CURRENT_1",  par[2]);
@@ -388,11 +454,27 @@ void sendStatus(void)
 
 void read3Phase(void)
 {
+  uint8_t upd = 0;
+  char topic[16];
+  char buffer[128];
+  int nn, n = 0;
+
   digitalWrite(LED_BUILTIN, LOW);
 
   for ( int c = 0; c < NR_OF_PHASES; c++) {
     irms[c] = ct[c].calcIrms(1480);
     RMSPower[c] = 230*irms[c];
+
+    dtostrf(irms[c],1,2,buffer+n);
+    n = strlen(buffer);
+    n += sprintf(buffer+n, "  ");
+
+    if( change(irms[c], oldIrms[c], DELTA_AMP) ) {
+      upd |= 1<<c;
+      oldIrms[c] = irms[c];
+    }
+    if( irms[c] > peakCurrent[c] )
+      peakCurrent[c] = irms[c];
     if( RMSPower[c] > peakPower[c] )
       peakPower[c] = RMSPower[c];
     // Get time since last reading ...
@@ -400,8 +482,17 @@ void read3Phase(void)
     unsigned long time = (endMillis[c] - startMillis[c]);
     startMillis[c] = endMillis[c];
     // How much power has been used ... ?
-    double duration = ((double)time)/(3600000.0); // Time in hours since last reading
+    double duration = ((double)time)/(60*60*1000.0); // Time in hours since last reading
     kilos[c] += RMSPower[c] * duration / 1000; // So many kWh have been used ...
+  }
+
+  Serial.println(buffer);
+  
+  for ( int c = 0; c < NR_OF_PHASES; c++) {
+    if( upd & (1<<c) ) {
+      sprintf(topic, "phase_%d", c+1);
+      sendMsgF(topic, irms[c]);
+    }
   }
   digitalWrite(LED_BUILTIN, HIGH);
 }
