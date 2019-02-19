@@ -5,6 +5,7 @@ Some resources:
 * https://github.com/fahrvergnuugen/EmonLib
 * https://github.com/jrowberg/i2cdevlib/tree/master/Arduino/ADS1115
 * https://github.com/mouse256/monitoring-arduino/tree/master/power-arduino/src
+* https://github.com/openenergymonitor/learn/blob/master/view/electricity-monitoring/ctac/emonlib-calibration-theory.md
 
 Note that a file "mySSID.h" should be created. It only contains some IDs and 
 passwords and should not be checked in.

@@ -14,34 +14,57 @@
 #include <time.h>                       // time() ctime()
 #include <sys/time.h>                   // struct timeval
 #include <coredecls.h>                  // settimeofday_cb()
+#include <Timezone.h>   // https://github.com/JChristensen/Timezone
 
-#include "mySSID.h"
 #include "EmonLib.h"
 
-const char* otaHost = "PowerMeterOTA";
-const char* mqttClient = "PowerMeterJN";
 
-#define RX_DEBUG
-#define USE_BLINK_INTERRUPT
+//### LOCAL SETTINGS ##########################################
+#include "mySSID.h"         // Include private SSID and password etc ...
+const char* otaHost     = "PowerMeterOTA";
+const char* mqttClient  = "PowerMeterJN";
 
+#define RX_DEBUG            // Some additional printouts ...
+#define USE_BLINK_INTERRUPT // Count blinks on the powermeter
+#define USE_MQTT            // Remove if running in e.g. a test environment ...
+#define NR_OF_PHASES  3     // Number of phases to watch
+#define SCT_013_000         // The sensor used
+//#############################################################
+
+#ifdef USE_BLINK_INTERRUPT
+// The blinking LED on the meter could be connected here ...
+const int blinkPin =          D0;
+#endif
 const int sclPin =            D1;
 const int sdaPin =            D2;
 
-#ifdef USE_BLINK_INTERRUPT
-const int blinkPin =          D0;
+#if defined(SCT_013_000)
+// and for the YHDC SCT-013-000 CT sensor:
+#define IP  100       // 100 A
+#define IPC 0.05      // 50 mA
+#define RT  (IP/IPC)  // Rt = 100 A ÷ 50 mA = 2000
+#define RB  78        // Burden resistor
+#define CORR_CURRENT  (RT/RB)
+#elif defined(SCT_013_030)
+// Ip is the rated primary current, and Vs is the output voltage at that current, then
+// current constant = Ip ÷ Vs
+// and for the YHDC SCT-013-000 CT sensor:
+#define IP  30        // 30 A
+#define VS  1   // 1V
+#define CORR_CURRENT  (IP/VS)
+#else
+#error Must select which sensor to use!
 #endif
-
-#define USE_MQTT
-#define NR_OF_PHASES  3
-#define MAX_CURRENT   30
 
 bool running = false;
 long statusStart = 0L;
+// Seconds between status messages ...
 #define STATUS_TIME (1000*15) // (1000*60*5) // 5 minutes ...
 
 // Create  instances for each CT channel
 EnergyMonitor ct[NR_OF_PHASES];
 
+// The pins connected to the sensors
 int sctPin[NR_OF_PHASES] = { ADC_CH0, ADC_CH1, ADC_CH2 };
 
 WiFiClient espClient;
@@ -64,6 +87,7 @@ unsigned long delayTime = 1000;
 timeval cbtime;      // time set in callback
 bool cbtime_set = false;
 
+
 void time_is_set(void) {
   gettimeofday(&cbtime, NULL);
   cbtime_set = true;
@@ -72,6 +96,11 @@ void time_is_set(void) {
 
 // for testing purpose:
 extern "C" int clock_gettime(clockid_t unused, struct timespec *tp);
+
+TimeChangeRule CEST = {"", Last, Sun, Mar, 2, 120};     
+TimeChangeRule CET = {"", Last, Sun, Oct, 3, 60}; 
+Timezone CE(CEST, CET);
+TimeChangeRule *tcr;
 
 #define PTM(w) \
   Serial.print(":" #w "="); \
@@ -131,7 +160,7 @@ void setup() {
   // read when 1 V is produced at the analogue input
   for (int i = 0; i < NR_OF_PHASES; i++) {
     ct[i].inputPinReader = adcPinReader; // Replace the default pin reader with the customized ads pin reader
-    ct[i].current(sctPin[i], MAX_CURRENT);
+    ct[i].current(sctPin[i], CORR_CURRENT);
   }
 
   Serial.println(F("Init OTA ..."));
@@ -226,6 +255,8 @@ void loop()
   gettimeofday(&tv, nullptr);
   clock_gettime(0, &tp);
   now = time(nullptr);
+  time_t cet=CE.toLocal(now(),&tcr);
+  setTime(cet);
   now_ms = millis();
   now_us = micros();
 /**
@@ -434,6 +465,9 @@ void sendStatus(void)
         }
     }
   )";
+
+  time_t local = CE.toLocal(utc, &tcr);  
+  sprintf(msg, "%02d:%02d", hour(local), minute(local)); 
 
   tm *ptm = localtime(&now);
   sprintf(msg, "%d-%02d-%02d", ptm->tm_year+1900, ptm->tm_mon+1, ptm->tm_mday);
