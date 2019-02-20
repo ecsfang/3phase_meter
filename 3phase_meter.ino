@@ -5,6 +5,7 @@
 #include <SPI.h>
 #include "3phase_adc.h"
 
+#include <NTPClient.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266mDNS.h>
 #include <WiFiUdp.h>
@@ -25,10 +26,12 @@ const char* otaHost     = "PowerMeterOTA";
 const char* mqttClient  = "PowerMeterJN";
 
 #define RX_DEBUG            // Some additional printouts ...
-#define USE_BLINK_INTERRUPT // Count blinks on the powermeter
-#define USE_MQTT            // Remove if running in e.g. a test environment ...
+//#define USE_BLINK_INTERRUPT // Count blinks on the powermeter
+//#define USE_MQTT            // Remove if running in e.g. a test environment ...
 #define NR_OF_PHASES  3     // Number of phases to watch
 #define SCT_013_000         // The sensor used
+#define USE_STATUS          // Define to send status message every X minute
+#define STATUS_TIME   15    // Seconds between status messages ...
 //#############################################################
 
 #ifdef USE_BLINK_INTERRUPT
@@ -58,8 +61,6 @@ const int sdaPin =            D2;
 
 bool running = false;
 long statusStart = 0L;
-// Seconds between status messages ...
-#define STATUS_TIME (1000*15) // (1000*60*5) // 5 minutes ...
 
 // Create  instances for each CT channel
 EnergyMonitor ct[NR_OF_PHASES];
@@ -75,55 +76,23 @@ char msg[MSG_LEN];
 
 unsigned long delayTime = 1000;
 
-#define TZ              1       // (utc+) TZ in hours
-#define DST_MN          0 //60      // use 60mn for summer time in some countries
-
-////////////////////////////////////////////////////////
-
-#define TZ_MN           ((TZ)*60)
-#define TZ_SEC          ((TZ)*3600)
-#define DST_SEC         ((DST_MN)*60)
-
-timeval cbtime;      // time set in callback
-bool cbtime_set = false;
-
-
-void time_is_set(void) {
-  gettimeofday(&cbtime, NULL);
-  cbtime_set = true;
-  Serial.println("------------------ settimeofday() was called ------------------");
-}
-
-// for testing purpose:
-extern "C" int clock_gettime(clockid_t unused, struct timespec *tp);
-
 TimeChangeRule CEST = {"", Last, Sun, Mar, 2, 120};     
 TimeChangeRule CET = {"", Last, Sun, Oct, 3, 60}; 
 Timezone CE(CEST, CET);
 TimeChangeRule *tcr;
 
-#define PTM(w) \
-  Serial.print(":" #w "="); \
-  Serial.print(tm->tm_##w);
+WiFiUDP ntpUDP;
 
-void printTm(const char* what, const tm* tm) {
-  Serial.print(what);
-  PTM(isdst); PTM(yday); PTM(wday);
-  PTM(year);  PTM(mon);  PTM(mday);
-  PTM(hour);  PTM(min);  PTM(sec);
-}
+// By default 'pool.ntp.org' is used with 60 seconds update interval and
+// no offset
+NTPClient timeClient(ntpUDP);
 
-timeval tv;
-timespec tp;
-time_t now;
-uint32_t now_ms, now_us;
+uint32_t seconds(void) { return millis()/1000; }
 
 void setup() {
   Serial.begin(115200);
   delay(2500);
   Serial.println(F("PowerMeter!"));
-
-  settimeofday_cb(time_is_set);
 
   pinMode(LED_BUILTIN, OUTPUT);
 
@@ -206,8 +175,7 @@ void setup() {
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 
-  configTime(TZ_SEC, DST_SEC, "pool.ntp.org");
-  // don't wait, observe time changing when ntp timestamp is received
+  timeClient.begin();
   
 #ifdef USE_MQTT
   client.setServer(mqtt_server, 1883);
@@ -252,56 +220,10 @@ void loop()
 
   ArduinoOTA.handle();
 
-  gettimeofday(&tv, nullptr);
-  clock_gettime(0, &tp);
-  now = time(nullptr);
-  time_t cet=CE.toLocal(now(),&tcr);
+  timeClient.update();
+
+  time_t cet=CE.toLocal(timeClient.getEpochTime(),&tcr);
   setTime(cet);
-  now_ms = millis();
-  now_us = micros();
-/**
-  // localtime / gmtime every second change
-  static time_t lastv = 0;
-  if (lastv != tv.tv_sec) {
-    lastv = tv.tv_sec;
-    Serial.println();
-    printTm("localtime", localtime(&now));
-    Serial.println();
-    printTm("gmtime   ", gmtime(&now));
-    Serial.println();
-    Serial.println();
-  }
-
-  // time from boot
-  Serial.print("clock:");
-  Serial.print((uint32_t)tp.tv_sec);
-  Serial.print("/");
-  Serial.print((uint32_t)tp.tv_nsec);
-  Serial.print("ns");
-
-  // time from boot0
-  Serial.print(" millis:");
-  Serial.print(now_ms);
-  Serial.print(" micros:");
-  Serial.print(now_us);
-
-  // EPOCH+tz+dst
-  Serial.print(" gtod:");
-  Serial.print((uint32_t)tv.tv_sec);
-  Serial.print("/");
-  Serial.print((uint32_t)tv.tv_usec);
-  Serial.print("us");
-
-  // EPOCH+tz+dst
-  Serial.print(" time:");
-  Serial.print((uint32_t)now);
-
-  // human readable
-  Serial.print(" ctime:(UTC+");
-  Serial.print((uint32_t)(TZ * 60 + DST_MN));
-  Serial.print("mn)");
-  Serial.print(ctime(&now));
-***************************************/
 
   if ( bBlink ) {
     Serial.print("Blinks: ");
@@ -312,7 +234,7 @@ void loop()
 //  testADC();
   read3Phase();
 
-  if (running && ((millis() - statusStart) >= STATUS_TIME)) {
+  if (running && ((seconds() - statusStart) >= STATUS_TIME)) {
     statusStart += STATUS_TIME; // this prevents drift in the delays
 
     Serial.println(F("Send status ..."));
@@ -338,7 +260,9 @@ void sendMsg(const char *topic, const char *m)
   Serial.print(msg);
   Serial.print(" ");
   Serial.println(m);
+#ifdef USE_MQTT
   client.publish(msg, m);
+#endif
 }
 
 void sendMsgF(const char *topic, double v)
@@ -388,7 +312,7 @@ int           oldPower[NR_OF_PHASES] = { -99, -99, -99};
 // Current values ...
 double        irms[NR_OF_PHASES];
 unsigned long RMSPower[NR_OF_PHASES];       // Current power (W)
-unsigned long peakCurrent[NR_OF_PHASES];    // Peak current (per day)
+double        peakCurrent[NR_OF_PHASES];    // Peak current (per day)
 unsigned long peakPower[NR_OF_PHASES];      // Peak power (per day)
 double        kilos[NR_OF_PHASES];          // Total kWh today (per phase)
 unsigned long todayPower;                   // Todays total
@@ -413,22 +337,24 @@ void sendStatus(void)
   char    values[BUF_LEN];
   int     n = 0;
 
+  // Param 0
   n = sprintf(values, "VALUES:%ld;", todayPower);
+  // Param 1
   n += sprintf(values+n, "%ld;", yesterdayPower);
+
   for( int c=0; c<NR_OF_PHASES; c++ ) {
-    dtostrf(irms[0],1,1,values+n);
+    // CURRENT
+    dtostrf(irms[c],1,1,values+n);
     n = strlen(values);
     n += sprintf(values+n, ";");
-  }
-  for( int c=0; c<NR_OF_PHASES; c++ )
+    // POWER
     n += sprintf(values+n, "%d;", RMSPower[c]);
-  for( int c=0; c<NR_OF_PHASES; c++ ) {
-    dtostrf(kilos[0],1,1,values+n);
+    // TODAY
+    dtostrf(kilos[c],1,1,values+n);
     n = strlen(values);
     n += sprintf(values+n, ";");
-  }
-  for( int c=0; c<NR_OF_PHASES; c++ ) {
-    dtostrf(peakPower[0],1,1,values+n);
+    // PEAK
+    dtostrf(peakCurrent[c],1,1,values+n);
     n = strlen(values);
     n += sprintf(values+n, ";");
   }
@@ -450,42 +376,45 @@ void sendStatus(void)
       "ENERGY": {
         "Total": $TOTAL,
         "Yesterday":$YDAY,
-        "Today1": $TODAY_1,
-        "Today2": $TODAY_2,
-        "Today3": $TODAY_3,
-        "Current1": $CURRENT_1,
-        "Current2": $CURRENT_2,
-        "Current3": $CURRENT_3,
-        "Power1": $POWER_1,
-        "Power2": $POWER_2,
-        "Power3": $POWER_3,
-        "Peak1": $PEAK_1,
-        "Peak2": $PEAK_2,
-        "Peak3": $PEAK_3
+        "Phase1": {
+          "Today": $TODAY_1,
+          "Current": $CURRENT_1,
+          "Power": $POWER_1,
+          "Peak": $PEAK_1
+        },
+        "Phase2": {
+          "Today": $TODAY_2,
+          "Current": $CURRENT_2,
+          "Power": $POWER_2,
+          "Peak": $PEAK_2
+        },
+        "Phase3": {
+          "Today": $TODAY_3,
+          "Current": $CURRENT_3,
+          "Power": $POWER_3,
+          "Peak": $PEAK_3
         }
+      }
     }
   )";
 
-  time_t local = CE.toLocal(utc, &tcr);  
-  sprintf(msg, "%02d:%02d", hour(local), minute(local)); 
+  time_t local = CE.toLocal(timeClient.getEpochTime(), &tcr);
+  sprintf(msg, "%d.%02d.%02d %02d:%02d:%02d", year(local), month(local), day(local), hour(local), minute(local), second(local));
 
-  tm *ptm = localtime(&now);
-  sprintf(msg, "%d-%02d-%02d", ptm->tm_year+1900, ptm->tm_mon+1, ptm->tm_mday);
-  
   json.replace("$TIME",       msg);
   json.replace("$TOTAL",      par[0]);
   json.replace("$YDAY",       par[1]);
   json.replace("$CURRENT_1",  par[2]);
-  json.replace("$CURRENT_2",  par[3]);
-  json.replace("$CURRENT_3",  par[4]);
-  json.replace("$POWER_1",    par[5]);
-  json.replace("$POWER_2",    par[6]);
-  json.replace("$POWER_3",    par[7]);
-  json.replace("$TODAY_1",    par[8]);
-  json.replace("$TODAY_2",    par[9]);
-  json.replace("$TODAY_3",    par[10]);
-  json.replace("$PEAK_1",     par[11]);
-  json.replace("$PEAK_2",     par[12]);
+  json.replace("$POWER_1",    par[3]);
+  json.replace("$TODAY_1",    par[4]);
+  json.replace("$PEAK_1",     par[5]);
+  json.replace("$CURRENT_2",  par[6]);
+  json.replace("$POWER_2",    par[7]);
+  json.replace("$TODAY_2",    par[8]);
+  json.replace("$PEAK_2",     par[9]);
+  json.replace("$CURRENT_3",  par[10]);
+  json.replace("$POWER_3",    par[11]);
+  json.replace("$TODAY_3",    par[12]);
   json.replace("$PEAK_3",     par[13]);
 
   Serial.println( json );
