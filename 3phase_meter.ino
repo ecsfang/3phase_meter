@@ -65,10 +65,6 @@ const int sdaPin =    D2;
 #error Must select which sensor to use!
 #endif
 
-bool running = false;
-long statusStart = 0L;
-long timeStart = 0L;
-
 // Create  instances for each CT channel
 EnergyMonitor ct[NR_OF_PHASES];
 
@@ -78,10 +74,13 @@ int sctPin[NR_OF_PHASES] = { PHASE_CH1, PHASE_CH2, PHASE_CH3 };
 WiFiClient espClient;
 PubSubClient client(espClient);
 
+// Check current with 1Hz ...
 unsigned long delayTime = 1000;
 
+// Set up summer/winter-time rules
 TimeChangeRule CEST = {"", Last, Sun, Mar, 2, 120};     
 TimeChangeRule CET = {"", Last, Sun, Oct, 3, 60}; 
+
 Timezone CE(CEST, CET);
 TimeChangeRule *tcr;
 
@@ -138,7 +137,8 @@ void setup() {
   // the current constant is the value of current you want to
   // read when 1 V is produced at the analogue input
   for (int i = 0; i < NR_OF_PHASES; i++) {
-    ct[i].inputPinReader = adcPinReader; // Replace the default pin reader with the customized ads pin reader
+    // Replace the default pin reader with the customized ads pin reader
+    ct[i].inputPinReader = adcPinReader;
     ct[i].current(sctPin[i], CORR_CURRENT);
   }
 
@@ -191,8 +191,9 @@ void setup() {
 #ifdef USE_MQTT
   client.setServer(mqtt_server, 1883);
 #endif
+#ifdef USE_STATUS
   flipper.attach(STATUS_TIME, sendStatus);
-  running = true;
+#endif
 }
 
 void reconnect() {
@@ -422,6 +423,7 @@ void sendStatus(void)
     }
   )";
 
+  local = now();
   sprintf(dateBuf, "%d.%02d.%02d %02d:%02d:%02d", year(local), month(local), day(local), hour(local), minute(local), second(local));
 
   json.replace("$TIME",       dateBuf);
