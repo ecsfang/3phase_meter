@@ -87,6 +87,7 @@ TimeChangeRule *tcr;
 WiFiUDP ntpUDP;
 
 Ticker flipper;
+bool  bSendStatus = false;
 
 // By default 'pool.ntp.org' is used with 60 seconds update interval and
 // no offset
@@ -192,7 +193,7 @@ void setup() {
   client.setServer(mqtt_server, 1883);
 #endif
 #ifdef USE_STATUS
-  flipper.attach(STATUS_TIME, sendStatus);
+  flipper.attach(STATUS_TIME, doSendStatus);
 #endif
 }
 
@@ -259,6 +260,9 @@ void loop()
 
 //  testADC();
   read3Phase();
+
+  if( bSendStatus )
+    sendStatus();
 
   delay(delayTime);
   tCnt++;
@@ -355,6 +359,11 @@ void runAtMidnight(void)
 #define SENSOR_PAR_CNT (NR_OF_PHASES*4+2)
 #define BUF_LEN 1024
 
+void doSendStatus(void)
+{
+  bSendStatus = true;
+}
+
 void sendStatus(void)
 {
   char  values[BUF_LEN];
@@ -446,6 +455,7 @@ void sendStatus(void)
   Serial.println( json );
 #endif
   sendMsg("status", json);
+  bSendStatus = false;
 }
 
 
