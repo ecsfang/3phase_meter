@@ -25,7 +25,7 @@
 #include "mySSID.h"         // Include private SSID and password etc ...
 const char* otaHost     = "PowerMeterOTA";
 const char* mqttClient  = "PowerMeterJN";
-
+#define MESSAGE       "powermeter"
 #define RX_DEBUG              // Some additional printouts ...
 //#define USE_BLINK_INTERRUPT // Count blinks on the powermeter
 #define USE_MQTT              // Remove if running in e.g. a test environment ...
@@ -209,7 +209,7 @@ void reconnect() {
       Serial.println("Connected!");
 #endif
       // Once connected, publish an announcement...
-      client.publish("powerMeter", "ready");
+      client.publish(MESSAGE, "ready");
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
@@ -280,7 +280,7 @@ void sendMsg(const char *topic, const char *m)
   #define MSG_LEN 50
   char msg[MSG_LEN];
 
-  snprintf (msg, MSG_LEN, "powermeter/%s", topic);
+  snprintf (msg, MSG_LEN, "%s/%s", MESSAGE, topic);
 #ifdef RX_DEBUG
   Serial.print("Publish message: ");
   Serial.print(msg);
@@ -454,7 +454,7 @@ void sendStatus(void)
 #ifdef RX_DEBUG
   Serial.println( json );
 #endif
-  sendMsg("status", json);
+  sendMsg("status", json.c_str());
   bSendStatus = false;
 }
 
