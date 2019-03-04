@@ -35,9 +35,9 @@ const char* mqttClient  = "PowerMeterJN";
 #define USE_STATUS            // Define to send status message every X minute
 #define STATUS_TIME   15      // Seconds between status messages ...
 #define NTP_TIME      3600    // Seconds between NTP-time updates ...
-#define PHASE_CH1     ADC_CH0 // The channels used on the ADC
-#define PHASE_CH2     ADC_CH1
-#define PHASE_CH3     ADC_CH2
+#define PHASE_CH1     ADC_CH5 // The channels used on the ADC
+#define PHASE_CH2     ADC_CH6
+#define PHASE_CH3     ADC_CH7
 //#############################################################
 
 #ifdef USE_BLINK_INTERRUPT
