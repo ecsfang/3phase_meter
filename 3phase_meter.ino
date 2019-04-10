@@ -1,39 +1,47 @@
 /***************************************************************************
   POWER METER - with 3 phases and blink detection
  ***************************************************************************/
+#include <FS.h>                   //this needs to be first, or it all crashes and burns...
+
 #include <Wire.h>
 #include <SPI.h>
 #include "3phase_adc.h"
 
+#include <ESP8266WiFi.h>          //ESP8266 Core WiFi Library (you most likely already have this in your sketch)
+
+#include <DNSServer.h>            //Local DNS Server used for redirecting all requests to the configuration portal
+#include <ESP8266WebServer.h>     //Local WebServer used to serve the configuration portal
+#include <WiFiManager.h>          //https://github.com/tzapu/WiFiManager WiFi Configuration Magic
+
 #include <NTPClient.h>
-#include <ESP8266WiFi.h>
-#include <ESP8266mDNS.h>
-#include <WiFiUdp.h>
+
+#include <ArduinoJson.h>          //https://github.com/bblanchon/ArduinoJson
+
 #include <ArduinoOTA.h>
 #include <PubSubClient.h>
 
-#include <time.h>                       // time() ctime()
-#include <sys/time.h>                   // struct timeval
-#include <coredecls.h>                  // settimeofday_cb()
-#include <Timezone.h>   // https://github.com/JChristensen/Timezone
+#include <time.h>                 // time() ctime()
+#include <sys/time.h>             // struct timeval
+#include <coredecls.h>            // settimeofday_cb()
+#include <Timezone.h>             // https://github.com/JChristensen/Timezone
 #include <Ticker.h>
 
 #include "EmonLib.h"
 
 
 //### LOCAL SETTINGS ##########################################
-#include "mySSID.h"         // Include private SSID and password etc ...
+#include "mySSID.h"               // Include private SSID and password etc ...
 const char* otaHost     = "PowerMeterOTA";
 const char* mqttClient  = "PowerMeterJN";
 
-#define TOPIC        "powermeter2"
-#define RX_DEBUG            // Some additional printouts ...
-//#define USE_BLINK_INTERRUPT // Count blinks on the powermeter
-#define USE_MQTT            // Remove if running in e.g. a test environment ...
-#define NR_OF_PHASES  3     // Number of phases to watch
-#define SCT_013_000         // The sensor used
-#define USE_STATUS          // Define to send status message every X minute
-#define STATUS_TIME   15    // Seconds between status messages ...
+#define MESSAGE           "powermeter2"
+#define RX_DEBUG                  // Some additional printouts ...
+//#define USE_BLINK_INTERRUPT       // Count blinks on the powermeter
+#define USE_MQTT                  // Remove if running in e.g. a test environment ...
+#define NR_OF_PHASES  3           // Number of phases to watch
+#define SCT_013_000               // The sensor used
+#define USE_STATUS                // Define to send status message every X minute
+#define STATUS_TIME   15          // Seconds between status messages ...
 //#############################################################
 
 #ifdef USE_BLINK_INTERRUPT
@@ -65,7 +73,7 @@ const int blinkPin =  D0;
 EnergyMonitor ct[NR_OF_PHASES];
 
 // The pins connected to the sensors
-int sctPin[NR_OF_PHASES] = { PHASE_CH1, PHASE_CH2, PHASE_CH3 };
+int sctPin[NR_OF_PHASES] = { ADC_CH0, ADC_CH1, ADC_CH2 };
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -95,6 +103,232 @@ time_t  getNTPtime(void) {
   return CE.toLocal(timeClient.getEpochTime(), &tcr);
 }
 
+// Flag for saving data
+bool shouldSaveConfig = false;
+
+// Callback notifying us of the need to save config
+void saveConfigCallback () {
+  Serial.println("Should save config");
+  shouldSaveConfig = true;
+}
+
+char mqtt_server[40];
+char mqtt_port[6] = "8080";
+
+void setup() {
+  Serial.begin(115200);
+  delay(2500);
+  Serial.println(F("PowerMeter!"));
+
+  pinMode(LED_BUILTIN, OUTPUT);
+
+#ifdef USE_BLINK_INTERRUPT
+  pinMode(blinkPin, INPUT);
+  attachInterrupt(digitalPinToInterrupt(blinkPin), onPulse, FALLING);
+#endif
+
+  Serial.println(F("Blink LEDs ..."));
+  for(int i=0; i<16; i++) {
+    digitalWrite(LED_BUILTIN, LOW);  // On ...
+    delay(100);
+    digitalWrite(LED_BUILTIN, HIGH);  // Off ...
+    delay(100);
+  }
+
+  //clean FS for testing 
+//  SPIFFS.format();
+
+  //read configuration from FS json
+  Serial.println("mounting FS...");
+
+  if (SPIFFS.begin()) {
+    Serial.println("mounted file system");
+    if (SPIFFS.exists("/config.json")) {
+      //file exists, reading and loading
+      Serial.println("reading config file");
+      File configFile = SPIFFS.open("/config.json", "r");
+      if (configFile) {
+        Serial.println("opened config file");
+        size_t size = configFile.size();
+        // Allocate a buffer to store contents of the file.
+        std::unique_ptr<char[]> buf(new char[size]);
+
+        configFile.readBytes(buf.get(), size);
+        DynamicJsonDocument doc;
+        DeserializationError error = deserializeJson(doc, buf.get());
+        if (error) {
+        }
+        JsonObject json = doc.as<JsonObject>();
+        serializeJson(json, Serial);
+        if (!json.isNull()) {
+          Serial.println("\nparsed json");
+          strcpy(mqtt_server, json["mqtt_server"]);
+          strcpy(mqtt_port, json["mqtt_port"]);
+//          strcpy(mqtt_user, json["mqtt_user"]);
+//          strcpy(mqtt_pass, json["mqtt_pass"]);
+
+        } else {
+          Serial.println("failed to load json config");
+        }
+      }
+    }
+  } else {
+    Serial.println("failed to mount FS");
+  }
+  //end read
+
+  // The extra parameters to be configured (can be either global or just in the setup)
+  // After connecting, parameter.getValue() will get you the configured value
+  // id/name placeholder/prompt default length
+  WiFiManagerParameter custom_mqtt_server("server", "mqtt server", mqtt_server, 40);
+  WiFiManagerParameter custom_mqtt_port("port", "mqtt port", mqtt_port, 6);
+//  WiFiManagerParameter custom_mqtt_user("user", "mqtt user", mqtt_user, 20);
+//  WiFiManagerParameter custom_mqtt_pass("pass", "mqtt pass", mqtt_pass, 20);
+
+  //WiFiManager
+  //Local intialization. Once its business is done, there is no need to keep it around
+  WiFiManager wifiManager;
+
+// Reset Wifi settings for testing  
+//  wifiManager.resetSettings();
+
+  //set config save notify callback
+  wifiManager.setSaveConfigCallback(saveConfigCallback);
+
+  //set static ip
+//  wifiManager.setSTAStaticIPConfig(IPAddress(10,0,1,99), IPAddress(10,0,1,1), IPAddress(255,255,255,0));
+  
+  //add all your parameters here
+  wifiManager.addParameter(&custom_mqtt_server);
+  wifiManager.addParameter(&custom_mqtt_port);
+//  wifiManager.addParameter(&custom_mqtt_user);
+//  wifiManager.addParameter(&custom_mqtt_pass);
+
+  //reset settings - for testing
+  //wifiManager.resetSettings();
+
+  //set minimum quality of signal so it ignores AP's under that quality
+  //defaults to 8%
+  //wifiManager.setMinimumSignalQuality();
+  
+  //sets timeout until configuration portal gets turned off
+  //useful to make it all retry or go to sleep
+  //in seconds
+  //wifiManager.setTimeout(120);
+
+  //fetches ssid and pass and tries to connect
+  //if it does not connect it starts an access point with the specified name
+  //here  "AutoConnectAP"
+  //and goes into a blocking loop awaiting configuration
+  if (!wifiManager.autoConnect("AutoConnectAP", "password")) {
+    Serial.println("failed to connect and hit timeout");
+    delay(3000);
+    //reset and try again, or maybe put it to deep sleep
+    ESP.reset();
+    delay(5000);
+  }
+
+  //if you get here you have connected to the WiFi
+  Serial.println("connected...yeey :)");
+
+  //read updated parameters
+  strcpy(mqtt_server, custom_mqtt_server.getValue());
+  strcpy(mqtt_port, custom_mqtt_port.getValue());
+//  strcpy(mqtt_user, custom_mqtt_user.getValue());
+//  strcpy(mqtt_pass, custom_mqtt_pass.getValue());
+
+  //save the custom parameters to FS
+  if (shouldSaveConfig) {
+    Serial.println("saving config");
+    DynamicJsonDocument doc;
+    JsonObject json = doc.to<JsonObject>();
+    json["mqtt_server"] = mqtt_server;
+    json["mqtt_port"] = mqtt_port;
+//    json["mqtt_user"] = mqtt_user;
+//    json["mqtt_pass"] = mqtt_pass;
+
+    File configFile = SPIFFS.open("/config.json", "w");
+    if (!configFile) {
+      Serial.println("failed to open config file for writing");
+    }
+
+    serializeJson(json, Serial);
+    serializeJson(json, configFile);
+    configFile.close();
+    //end save
+  }
+
+  initAdc();
+
+  Serial.println();
+
+  // Calibration factor = CT ratio / burden resistance
+  // the current constant is the value of current you want to
+  // read when 1 V is produced at the analogue input
+  for (int i = 0; i < NR_OF_PHASES; i++) {
+    // Replace the default pin reader with the customized ads pin reader
+    ct[i].inputPinReader = adcPinReader;
+    ct[i].current(sctPin[i], CORR_CURRENT);
+  }
+
+  Serial.println(F("Init OTA ..."));
+
+  ArduinoOTA.setHostname(otaHost);
+  ArduinoOTA.setPassword(flashpw);
+
+  ArduinoOTA.onStart([]() {
+    String type;
+    if (ArduinoOTA.getCommand() == U_FLASH) {
+      type = "sketch";
+    } else { // U_SPIFFS
+      type = "filesystem";
+    }
+    // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
+    Serial.println("Start updating " + type);
+  });
+  ArduinoOTA.onEnd([]() {
+    Serial.println("\nEnd");
+  });
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+  });
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.printf("Error[%u]: ", error);
+    if (error == OTA_AUTH_ERROR) {
+      Serial.println("Auth Failed");
+    } else if (error == OTA_BEGIN_ERROR) {
+      Serial.println("Begin Failed");
+    } else if (error == OTA_CONNECT_ERROR) {
+      Serial.println("Connect Failed");
+    } else if (error == OTA_RECEIVE_ERROR) {
+      Serial.println("Receive Failed");
+    } else if (error == OTA_END_ERROR) {
+      Serial.println("End Failed");
+    } else {
+      Serial.println("Unknown error!");
+    }
+  });
+  ArduinoOTA.begin();
+
+  Serial.println("Ready");
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+
+  setSyncProvider( getNTPtime );
+  timeClient.begin();
+  
+#ifdef USE_STATUS
+  flipper.attach(STATUS_TIME, doSendStatus);
+#endif
+
+#ifdef USE_MQTT
+  const uint16_t mqtt_port_x = atoi(mqtt_port); 
+  client.setServer(mqtt_server, mqtt_port_x);
+//  client.setServer(mqtt_server, 1883);
+#endif
+}
+
+#if 0
 void setup() {
   Serial.begin(115200);
   delay(2500);
@@ -192,6 +426,7 @@ void setup() {
   flipper.attach(STATUS_TIME, doSendStatus);
 #endif
 }
+#endif
 
 void reconnect() {
   // Loop until we're reconnected
@@ -279,7 +514,6 @@ void sendMsg(const char *topic, const char *m)
   snprintf (msg, MSG_LEN, "%s/%s", MESSAGE, topic);
 #ifdef RX_DEBUG
   Serial.print("Publish message: ");
-  snprintf (msg, MSG_LEN, "%s/%s", TOPIC, topic);
   Serial.print(msg);
   Serial.print(" ");
   Serial.println(m);
