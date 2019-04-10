@@ -114,6 +114,8 @@ void saveConfigCallback () {
 
 char mqtt_server[40];
 char mqtt_port[6] = "8080";
+char mqtt_user[16];
+char mqtt_pass[16];
 
 void setup() {
   Serial.begin(115200);
@@ -136,7 +138,7 @@ void setup() {
   }
 
   //clean FS for testing 
-//  SPIFFS.format();
+  //SPIFFS.format();
 
   //read configuration from FS json
   Serial.println("mounting FS...");
@@ -164,9 +166,8 @@ void setup() {
           Serial.println("\nparsed json");
           strcpy(mqtt_server, json["mqtt_server"]);
           strcpy(mqtt_port, json["mqtt_port"]);
-//          strcpy(mqtt_user, json["mqtt_user"]);
-//          strcpy(mqtt_pass, json["mqtt_pass"]);
-
+          strcpy(mqtt_user, json["mqtt_user"]);
+          strcpy(mqtt_pass, json["mqtt_pass"]);
         } else {
           Serial.println("failed to load json config");
         }
@@ -182,8 +183,8 @@ void setup() {
   // id/name placeholder/prompt default length
   WiFiManagerParameter custom_mqtt_server("server", "mqtt server", mqtt_server, 40);
   WiFiManagerParameter custom_mqtt_port("port", "mqtt port", mqtt_port, 6);
-//  WiFiManagerParameter custom_mqtt_user("user", "mqtt user", mqtt_user, 20);
-//  WiFiManagerParameter custom_mqtt_pass("pass", "mqtt pass", mqtt_pass, 20);
+  WiFiManagerParameter custom_mqtt_user("user", "mqtt user", mqtt_user, 20);
+  WiFiManagerParameter custom_mqtt_pass("pass", "mqtt pass", mqtt_pass, 20);
 
   //WiFiManager
   //Local intialization. Once its business is done, there is no need to keep it around
@@ -201,11 +202,11 @@ void setup() {
   //add all your parameters here
   wifiManager.addParameter(&custom_mqtt_server);
   wifiManager.addParameter(&custom_mqtt_port);
-//  wifiManager.addParameter(&custom_mqtt_user);
-//  wifiManager.addParameter(&custom_mqtt_pass);
+  wifiManager.addParameter(&custom_mqtt_user);
+  wifiManager.addParameter(&custom_mqtt_pass);
 
   //reset settings - for testing
-  //wifiManager.resetSettings();
+//  wifiManager.resetSettings();
 
   //set minimum quality of signal so it ignores AP's under that quality
   //defaults to 8%
@@ -234,8 +235,15 @@ void setup() {
   //read updated parameters
   strcpy(mqtt_server, custom_mqtt_server.getValue());
   strcpy(mqtt_port, custom_mqtt_port.getValue());
-//  strcpy(mqtt_user, custom_mqtt_user.getValue());
-//  strcpy(mqtt_pass, custom_mqtt_pass.getValue());
+  strcpy(mqtt_user, custom_mqtt_user.getValue());
+  strcpy(mqtt_pass, custom_mqtt_pass.getValue());
+
+  Serial.println("MQTT setttings:");
+  Serial.println(mqtt_server);
+  Serial.println(mqtt_port);
+  Serial.println(mqtt_user);
+  Serial.println(mqtt_pass);
+  Serial.println();
 
   //save the custom parameters to FS
   if (shouldSaveConfig) {
@@ -244,8 +252,8 @@ void setup() {
     JsonObject json = doc.to<JsonObject>();
     json["mqtt_server"] = mqtt_server;
     json["mqtt_port"] = mqtt_port;
-//    json["mqtt_user"] = mqtt_user;
-//    json["mqtt_pass"] = mqtt_pass;
+    json["mqtt_user"] = mqtt_user;
+    json["mqtt_pass"] = mqtt_pass;
 
     File configFile = SPIFFS.open("/config.json", "w");
     if (!configFile) {
@@ -314,7 +322,7 @@ void setup() {
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 
-  setSyncProvider( getNTPtime );
+//  setSyncProvider( getNTPtime );
   timeClient.begin();
   
 #ifdef USE_STATUS
@@ -327,106 +335,6 @@ void setup() {
 //  client.setServer(mqtt_server, 1883);
 #endif
 }
-
-#if 0
-void setup() {
-  Serial.begin(115200);
-  delay(2500);
-  Serial.println(F("PowerMeter!"));
-
-  pinMode(LED_BUILTIN, OUTPUT);
-
-#ifdef USE_BLINK_INTERRUPT
-  pinMode(blinkPin, INPUT);
-  attachInterrupt(digitalPinToInterrupt(blinkPin), onPulse, FALLING);
-#endif
-
-  Serial.println(F("Blink LEDs ..."));
-  for(int i=0; i<16; i++) {
-    digitalWrite(LED_BUILTIN, LOW);  // On ...
-    delay(100);
-    digitalWrite(LED_BUILTIN, HIGH);  // Off ...
-    delay(100);
-  }
-
-//  Serial.println(F("Init Wire ..."));
-//  Wire.begin(sdaPin, sclPin);
-
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  while (WiFi.waitForConnectResult() != WL_CONNECTED) {
-    Serial.println("Connection Failed! Rebooting...");
-    delay(5000);
-    ESP.restart();
-  }
-
-  initAdc();
-
-  Serial.println();
-
-  // Calibration factor = CT ratio / burden resistance
-  // the current constant is the value of current you want to
-  // read when 1 V is produced at the analogue input
-  for (int i = 0; i < NR_OF_PHASES; i++) {
-    // Replace the default pin reader with the customized ads pin reader
-    ct[i].inputPinReader = adcPinReader;
-    ct[i].current(sctPin[i], CORR_CURRENT);
-  }
-
-  Serial.println(F("Init OTA ..."));
-
-  ArduinoOTA.setHostname(otaHost);
-  ArduinoOTA.setPassword(flashpw);
-
-  ArduinoOTA.onStart([]() {
-    String type;
-    if (ArduinoOTA.getCommand() == U_FLASH) {
-      type = "sketch";
-    } else { // U_SPIFFS
-      type = "filesystem";
-    }
-    // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
-    Serial.println("Start updating " + type);
-  });
-  ArduinoOTA.onEnd([]() {
-    Serial.println("\nEnd");
-  });
-  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
-  });
-  ArduinoOTA.onError([](ota_error_t error) {
-    Serial.printf("Error[%u]: ", error);
-    if (error == OTA_AUTH_ERROR) {
-      Serial.println("Auth Failed");
-    } else if (error == OTA_BEGIN_ERROR) {
-      Serial.println("Begin Failed");
-    } else if (error == OTA_CONNECT_ERROR) {
-      Serial.println("Connect Failed");
-    } else if (error == OTA_RECEIVE_ERROR) {
-      Serial.println("Receive Failed");
-    } else if (error == OTA_END_ERROR) {
-      Serial.println("End Failed");
-    } else {
-      Serial.println("Unknown error!");
-    }
-  });
-  ArduinoOTA.begin();
-
-  Serial.println("Ready");
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
-
-  setSyncProvider( getNTPtime );
-  timeClient.begin();
-  
-#ifdef USE_MQTT
-  client.setServer(mqtt_server, 1883);
-#endif
-#ifdef USE_STATUS
-  flipper.attach(STATUS_TIME, doSendStatus);
-#endif
-}
-#endif
 
 void reconnect() {
   // Loop until we're reconnected
@@ -459,6 +367,8 @@ time_t local = 0;
 void loop()
 {
   static int  prevHour = 0;
+
+  timeClient.update();
 
 #ifdef USE_MQTT
   if (!client.connected())
@@ -552,7 +462,7 @@ void sendMsgI(const char *topic, int v)
 // ads.setGain(GAIN_EIGHT);      // 8x gain   +/- 0.512V  1 bit = 0.25mV   0.015625mV
 // ads.setGain(GAIN_SIXTEEN);    // 16x gain  +/- 0.256V  1 bit = 0.125mV  0.0078125mV
 
-#define DELTA_AMP 0.1
+#define DELTA_AMP 0.5
 #define DELTA_POW 50
 
 // Return true if change is big enough to report
@@ -663,7 +573,7 @@ void sendStatus(void)
     }
   )";
 
-  local = now();
+  local = getNTPtime(); //timeClient.getEpochTime(); //now();
   sprintf(dateBuf, "%d.%02d.%02d %02d:%02d:%02d", year(local), month(local), day(local), hour(local), minute(local), second(local));
 
   json.replace("$TIME",       dateBuf);
@@ -683,8 +593,10 @@ void sendStatus(void)
   json.replace("$PEAK_3",     par[13]);
 
 #ifdef RX_DEBUG
+  Serial.println(timeClient.getFormattedTime());
   Serial.println( json );
 #endif
+  Serial.println(timeClient.getFormattedTime());
   sendMsg("status", json.c_str());
   bSendStatus = false;
 }
