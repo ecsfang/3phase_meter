@@ -20,6 +20,9 @@
 #include <ArduinoOTA.h>
 #include <PubSubClient.h>
 
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
 #include <time.h>                 // time() ctime()
 #include <sys/time.h>             // struct timeval
 #include <coredecls.h>            // settimeofday_cb()
@@ -48,8 +51,9 @@ const char* mqttClient  = "PowerMeterJN";
 // The blinking LED on the meter could be connected here ...
 const int blinkPin =  D0;
 #endif
-//const int sclPin =            D1;
-//const int sdaPin =            D2;
+
+const int sclPin =            D1;
+const int sdaPin =            D2;
 
 #if defined(SCT_013_000)
 // and for the YHDC SCT-013-000 CT sensor:
@@ -93,6 +97,9 @@ WiFiUDP ntpUDP;
 Ticker flipper;
 bool  bSendStatus = false;
 
+#define OLED_RESET 0  // GPIO0
+Adafruit_SSD1306 OLED(OLED_RESET);
+
 // By default 'pool.ntp.org' is used with 60 seconds update interval and
 // no offset
 NTPClient timeClient(ntpUDP);
@@ -117,9 +124,24 @@ char mqtt_port[6] = "8080";
 char mqtt_user[16];
 char mqtt_pass[16];
 
+void oled_setup()   {
+  OLED.begin();
+  OLED.clearDisplay();
+
+  //Add stuff into the 'display buffer'
+  OLED.setTextWrap(false);
+  OLED.setTextSize(1);
+  OLED.setTextColor(WHITE);
+  OLED.setCursor(0,0);
+  OLED.println("PowerMeter!");
+ 
+  OLED.display(); //output 'display buffer' to screen  
+  OLED.startscrollleft(0x00, 0x0F); //make display scroll 
+}
+
 void setup() {
   Serial.begin(115200);
-  delay(2500);
+  delay(3000);
   Serial.println(F("PowerMeter!"));
 
   pinMode(LED_BUILTIN, OUTPUT);
@@ -130,7 +152,7 @@ void setup() {
 #endif
 
   Serial.println(F("Blink LEDs ..."));
-  for(int i=0; i<16; i++) {
+  for(int i=0; i<4; i++) {
     digitalWrite(LED_BUILTIN, LOW);  // On ...
     delay(100);
     digitalWrite(LED_BUILTIN, HIGH);  // Off ...
@@ -191,7 +213,7 @@ void setup() {
   WiFiManager wifiManager;
 
 // Reset Wifi settings for testing  
-//  wifiManager.resetSettings();
+  wifiManager.resetSettings();
 
   //set config save notify callback
   wifiManager.setSaveConfigCallback(saveConfigCallback);
@@ -329,6 +351,8 @@ void setup() {
   flipper.attach(STATUS_TIME, doSendStatus);
 #endif
 
+  oled_setup();
+  
 #ifdef USE_MQTT
   const uint16_t mqtt_port_x = atoi(mqtt_port); 
   client.setServer(mqtt_server, mqtt_port_x);
