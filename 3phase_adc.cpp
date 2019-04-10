@@ -131,7 +131,7 @@ int adcPinReader(int addr)
   // emonlib expect a value between 0 an 1024, so convert
   // TODO: we're loosing precision here as it's converted to a 10 bit value. fix this.
 //  return (tmp*adc.getMvPerCount()*1024)/3300; // 0-1024 (where 1024 = 3.3V)
-  return tmp*1110/2000;
+  return (tmp*1110/2000)*264/100;
 }
 
 void testADC(void)

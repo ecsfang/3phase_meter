@@ -25,9 +25,10 @@
 const char* otaHost     = "PowerMeterOTA";
 const char* mqttClient  = "PowerMeterJN";
 
+#define TOPIC        "powermeter2"
 #define RX_DEBUG            // Some additional printouts ...
 //#define USE_BLINK_INTERRUPT // Count blinks on the powermeter
-//#define USE_MQTT            // Remove if running in e.g. a test environment ...
+#define USE_MQTT            // Remove if running in e.g. a test environment ...
 #define NR_OF_PHASES  3     // Number of phases to watch
 #define SCT_013_000         // The sensor used
 #define USE_STATUS          // Define to send status message every X minute
@@ -38,15 +39,15 @@ const char* mqttClient  = "PowerMeterJN";
 // The blinking LED on the meter could be connected here ...
 const int blinkPin =          D0;
 #endif
-const int sclPin =            D1;
-const int sdaPin =            D2;
+//const int sclPin =            D1;
+//const int sdaPin =            D2;
 
 #if defined(SCT_013_000)
 // and for the YHDC SCT-013-000 CT sensor:
 #define IP  100       // 100 A
 #define IPC 0.05      // 50 mA
 #define RT  (IP/IPC)  // Rt = 100 A ÷ 50 mA = 2000
-#define RB  78        // Burden resistor
+#define RB  120        // Burden resistor
 #define CORR_CURRENT  (RT/RB)
 #elif defined(SCT_013_030)
 // Ip is the rated primary current, and Vs is the output voltage at that current, then
@@ -109,8 +110,8 @@ void setup() {
     delay(100);
   }
 
-  Serial.println(F("Init Wire ..."));
-  Wire.begin(sdaPin, sclPin);
+//  Serial.println(F("Init Wire ..."));
+//  Wire.begin(sdaPin, sclPin);
 
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
@@ -231,7 +232,7 @@ void loop()
     bBlink = false;
   }
 
-//  testADC();
+  //testADC();
   read3Phase();
 
   if (running && ((seconds() - statusStart) >= STATUS_TIME)) {
@@ -256,7 +257,7 @@ void onPulse()
 void sendMsg(const char *topic, const char *m)
 {
   Serial.print("Publish message: ");
-  snprintf (msg, MSG_LEN, "powermeter/%s", topic);
+  snprintf (msg, MSG_LEN, "%s/%s", TOPIC, topic);
   Serial.print(msg);
   Serial.print(" ");
   Serial.println(m);
@@ -268,7 +269,7 @@ void sendMsg(const char *topic, const char *m)
 void sendMsgF(const char *topic, double v)
 {
   char buf[32];
-  snprintf (buf, 32, "%.2f", v);
+  dtostrf(v, 1, 2, buf);
   sendMsg(topic, buf);
 }
 void sendMsgI(const char *topic, int v)
