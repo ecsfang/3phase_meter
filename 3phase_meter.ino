@@ -141,11 +141,11 @@ void oled_setup()   {
   OLED.setTextSize(2);
   OLED.setCursor(0,0);
   OLED.println("PowerMeter");
-  OLED.setTextSize(0);
-  OLED.println("Check AP!");
+//  OLED.setTextSize(0);
+//  OLED.println("Check AP!");
 
   OLED.display(); //output 'display buffer' to screen  
-  OLED.startscrollleft(0x00, 0x0F); //make display scroll 
+//  OLED.startscrollleft(0x00, 0x0F); //make display scroll 
 }
 
 void setup() {
@@ -225,7 +225,7 @@ void setup() {
   WiFiManager wifiManager;
 
 // Reset Wifi settings for testing  
-  wifiManager.resetSettings();
+//  wifiManager.resetSettings();
 
   //set config save notify callback
   wifiManager.setSaveConfigCallback(saveConfigCallback);
@@ -240,7 +240,7 @@ void setup() {
   wifiManager.addParameter(&custom_mqtt_pass);
 
   //reset settings - for testing
-//  wifiManager.resetSettings();
+  //wifiManager.resetSettings();
 
   //set minimum quality of signal so it ignores AP's under that quality
   //defaults to 8%
@@ -255,6 +255,18 @@ void setup() {
   //if it does not connect it starts an access point with the specified name
   //here  "AutoConnectAP"
   //and goes into a blocking loop awaiting configuration
+
+  OLED.clearDisplay();
+  //Add stuff into the 'display buffer'
+  OLED.setTextColor(WHITE);
+  OLED.setTextSize(1);
+  OLED.setCursor(0,10);
+  OLED.println("Check AP!");
+
+  OLED.display(); //output 'display buffer' to screen  
+  OLED.startscrollleft(0x00, 0x0F); //make display scroll 
+
+  
   if (!wifiManager.autoConnect("AutoConnectAP", "password")) {
     Serial.println("failed to connect and hit timeout");
     delay(3000);
@@ -262,6 +274,15 @@ void setup() {
     ESP.reset();
     delay(5000);
   }
+
+  OLED.clearDisplay();
+  //Add stuff into the 'display buffer'
+  OLED.setTextColor(WHITE);
+  OLED.setTextSize(1);
+  OLED.setCursor(0,10);
+  OLED.println("Connected!");
+
+  OLED.display(); //output 'display buffer' to screen  
 
   //if you get here you have connected to the WiFi
   Serial.println("connected...yeey :)");
@@ -661,7 +682,7 @@ void read3Phase(void)
     RMSPower[c] = 230*irms[c];
 
     //Add stuff into the 'display buffer'
-    n1 = sprintf(topic, "F1: ");
+    n1 = sprintf(topic, "F%d: ", c+1);
     dtostrf(irms[c],1,2,topic+n1);
     n1 = strlen(topic);
     sprintf(topic+n1, "A");
