@@ -8,27 +8,31 @@
 #include "3phase_adc.h"
 
 #include <ESP8266WiFi.h>          //ESP8266 Core WiFi Library (you most likely already have this in your sketch)
-
 #include <DNSServer.h>            //Local DNS Server used for redirecting all requests to the configuration portal
 #include <ESP8266WebServer.h>     //Local WebServer used to serve the configuration portal
 #include <WiFiManager.h>          //https://github.com/tzapu/WiFiManager WiFi Configuration Magic
 
-#include <NTPClient.h>
 
 #include <ArduinoJson.h>          //https://github.com/bblanchon/ArduinoJson
 
 #include <ArduinoOTA.h>
 #include <PubSubClient.h>
 
+// For the 0.96" OLED display
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
+// For timekeeping with correct daylight savings ...
+#include <NTPClient.h>
 #include <time.h>                 // time() ctime()
 #include <sys/time.h>             // struct timeval
 #include <coredecls.h>            // settimeofday_cb()
 #include <Timezone.h>             // https://github.com/JChristensen/Timezone
+
+// For doing repetitive jobs
 #include <Ticker.h>
 
+// Library for current and power calculations
 #include "EmonLib.h"
 
 
@@ -48,29 +52,33 @@ const char* mqttClient  = "PowerMeterJN";
 //#############################################################
 
 #ifdef USE_BLINK_INTERRUPT
-// The blinking LED on the meter could be connected here ...
+// The blinking LED on the energy meter could be connected here ...
 const int blinkPin =  D0;
 #endif
 
+// The pins connected to the I2C connector (display)
 const int sclPin =            D1;
 const int sdaPin =            D2;
 
 #if defined(SCT_013_000)
-// and for the YHDC SCT-013-000 CT sensor:
-#define IP  100       // 100 A
-#define IPC 0.05      // 50 mA
-#define RT  (IP/IPC)  // Rt = 100 A ÷ 50 mA = 2000
-#define RB  120        // Burden resistor
-#define CORR_CURRENT  (RT/RB)
+  // Settings for the YHDC SCT-013-000 CT sensor
+  // Measure current (50mA equal to 100A through the sensor)
+  #define IP  100       // 100 A
+  #define IPC 0.05      // 50 mA
+  #define RT  (IP/IPC)  // Rt = 100 A ÷ 50 mA = 2000
+  #define RB  120        // Burden resistor
+  #define CORR_CURRENT  (RT/RB)
 #elif defined(SCT_013_030)
-// Ip is the rated primary current, and Vs is the output voltage at that current, then
-// current constant = Ip ÷ Vs
-// and for the YHDC SCT-013-000 CT sensor:
-#define IP  30        // 30 A
-#define VS  1   // 1V
-#define CORR_CURRENT  (IP/VS)
+  // Settings for the YHDC SCT-013-030 CT sensor
+  // Measure voltage (1V equal to 30A through the sensor)
+  // Ip is the rated primary current, and Vs is the output voltage at that current, then
+  // current constant = Ip ÷ Vs
+  // and for the YHDC SCT-013-000 CT sensor:
+  #define IP  30        // 30 A
+  #define VS  1   // 1V
+  #define CORR_CURRENT  (IP/VS)
 #else
-#error Must select which sensor to use!
+  #error Must select which sensor to use!
 #endif
 
 // Create  instances for each CT channel
@@ -129,17 +137,21 @@ void oled_setup()   {
   OLED.clearDisplay();
 
   //Add stuff into the 'display buffer'
-  OLED.setTextWrap(false);
-  OLED.setTextSize(1);
   OLED.setTextColor(WHITE);
+  OLED.setTextSize(2);
   OLED.setCursor(0,0);
-  OLED.println("PowerMeter!");
- 
+  OLED.println("PowerMeter");
+  OLED.setTextSize(0);
+  OLED.println("Check AP!");
+
   OLED.display(); //output 'display buffer' to screen  
   OLED.startscrollleft(0x00, 0x0F); //make display scroll 
 }
 
 void setup() {
+
+  oled_setup();
+
   Serial.begin(115200);
   delay(3000);
   Serial.println(F("PowerMeter!"));
@@ -351,8 +363,6 @@ void setup() {
   flipper.attach(STATUS_TIME, doSendStatus);
 #endif
 
-  oled_setup();
-  
 #ifdef USE_MQTT
   const uint16_t mqtt_port_x = atoi(mqtt_port); 
   client.setServer(mqtt_server, mqtt_port_x);
@@ -392,7 +402,8 @@ void loop()
 {
   static int  prevHour = 0;
 
-  timeClient.update();
+  if( (tCnt % 10) == 0 )
+    timeClient.update();
 
 #ifdef USE_MQTT
   if (!client.connected())
@@ -413,7 +424,7 @@ void loop()
   }
 
   // Get current time ...
-  local = now();
+  local = getNTPtime();
   if( hour(local) != prevHour ) {
     // New hour ...
     if( hour(local) == 0 && prevHour == 24 ) {
@@ -512,11 +523,11 @@ unsigned long yesterdayPower;               // Yesterdays total
 
 void runAtMidnight(void)
 {
+  todayPower = 0;
   yesterdayPower = 0;
   for ( int c = 0; c < NR_OF_PHASES; c++) {
     yesterdayPower += (unsigned long)kilos[c];
     kilos[c] = 0.0;
-    todayPower = 0;
     peakPower[c] = 0;
   }
 }
@@ -632,15 +643,29 @@ void read3Phase(void)
   char topic[16];
 #ifdef RX_DEBUG
   int n = 0;
+  int n1 = 0;
   char buffer[128];
 #endif
 
   digitalWrite(LED_BUILTIN, LOW);
 
+  OLED.begin();
+  OLED.clearDisplay();
+  OLED.setTextColor(WHITE);
+  OLED.setTextSize(2);
+  OLED.setCursor(0,0);
+
   for ( int c = 0; c < NR_OF_PHASES; c++) {
     // Read the current value of phase 'c'
     irms[c] = ct[c].calcIrms(1480);
     RMSPower[c] = 230*irms[c];
+
+    //Add stuff into the 'display buffer'
+    n1 = sprintf(topic, "F1: ");
+    dtostrf(irms[c],1,2,topic+n1);
+    n1 = strlen(topic);
+    sprintf(topic+n1, "A");
+    OLED.println(topic);
 
 #ifdef RX_DEBUG
     dtostrf(irms[c],1,2,buffer+n);
@@ -668,6 +693,8 @@ void read3Phase(void)
     double duration = ((double)dTime)/(60*60*1000.0); // Time in hours since last reading
     kilos[c] += RMSPower[c] * duration / 1000; // So many kWh have been used ...
   }
+
+  OLED.display(); //output 'display buffer' to screen  
 
 #ifdef RX_DEBUG
   Serial.println(buffer);
