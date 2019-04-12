@@ -18,8 +18,10 @@
 #include <ArduinoOTA.h>
 #include <PubSubClient.h>
 
+//#define FIRST_FLASH
+
 // For the 0.96" OLED display
-#include <Adafruit_GFX.h>
+#include <Adafruit_GFX.h>attempt
 #include <Adafruit_SSD1306.h>
 
 // For timekeeping with correct daylight savings ...
@@ -41,7 +43,7 @@
 const char* otaHost     = "PowerMeterOTA";
 const char* mqttClient  = "PowerMeterJN";
 
-#define MESSAGE           "powermeter2"
+#define MESSAGE           "powermeter2" // Default message
 #define RX_DEBUG                  // Some additional printouts ...
 //#define USE_BLINK_INTERRUPT       // Count blinks on the powermeter
 #define USE_MQTT                  // Remove if running in e.g. a test environment ...
@@ -57,8 +59,8 @@ const int blinkPin =  D0;
 #endif
 
 // The pins connected to the I2C connector (display)
-const int sclPin =            D1;
-const int sdaPin =            D2;
+//const int sclPin =            D1;
+//const int sdaPin =            D2;
 
 #if defined(SCT_013_000)
   // Settings for the YHDC SCT-013-000 CT sensor
@@ -105,6 +107,13 @@ WiFiUDP ntpUDP;
 Ticker flipper;
 bool  bSendStatus = false;
 
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+
+// Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
+//#define OLED_RESET   0 // Reset pin # (or -1 if sharing Arduino reset pin)
+//Adafruit_SSD1306 OLED(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
 #define OLED_RESET 0  // GPIO0
 Adafruit_SSD1306 OLED(OLED_RESET);
 
@@ -131,6 +140,7 @@ char mqtt_server[40];
 char mqtt_port[6] = "8080";
 char mqtt_user[16];
 char mqtt_pass[16];
+char mqtt_msg[32];
 
 void oled_setup()   {
   OLED.begin();
@@ -171,8 +181,12 @@ void setup() {
     delay(100);
   }
 
+  sprintf( mqtt_msg, "%s", MESSAGE);
+
+#ifdef FIRST_FLASH
   //clean FS for testing 
-  //SPIFFS.format();
+  SPIFFS.format();
+#endif
 
   //read configuration from FS json
   Serial.println("mounting FS...");
@@ -190,7 +204,7 @@ void setup() {
         std::unique_ptr<char[]> buf(new char[size]);
 
         configFile.readBytes(buf.get(), size);
-        DynamicJsonDocument doc;
+        DynamicJsonDocument doc(256);
         DeserializationError error = deserializeJson(doc, buf.get());
         if (error) {
         }
@@ -202,6 +216,7 @@ void setup() {
           strcpy(mqtt_port, json["mqtt_port"]);
           strcpy(mqtt_user, json["mqtt_user"]);
           strcpy(mqtt_pass, json["mqtt_pass"]);
+          strcpy(mqtt_msg,  json["mqtt_msg"]);
         } else {
           Serial.println("failed to load json config");
         }
@@ -219,13 +234,16 @@ void setup() {
   WiFiManagerParameter custom_mqtt_port("port", "mqtt port", mqtt_port, 6);
   WiFiManagerParameter custom_mqtt_user("user", "mqtt user", mqtt_user, 20);
   WiFiManagerParameter custom_mqtt_pass("pass", "mqtt pass", mqtt_pass, 20);
+  WiFiManagerParameter custom_mqtt_msg("msg",   "mqtt msg",  mqtt_msg, 30);
 
   //WiFiManager
   //Local intialization. Once its business is done, there is no need to keep it around
   WiFiManager wifiManager;
 
-// Reset Wifi settings for testing  
-//  wifiManager.resetSettings();
+#ifdef FIRST_FLASH
+  // Reset Wifi settings for testing  
+  wifiManager.resetSettings();
+#endif
 
   //set config save notify callback
   wifiManager.setSaveConfigCallback(saveConfigCallback);
@@ -238,6 +256,7 @@ void setup() {
   wifiManager.addParameter(&custom_mqtt_port);
   wifiManager.addParameter(&custom_mqtt_user);
   wifiManager.addParameter(&custom_mqtt_pass);
+  wifiManager.addParameter(&custom_mqtt_msg);
 
   //reset settings - for testing
   //wifiManager.resetSettings();
@@ -276,6 +295,7 @@ void setup() {
   }
 
   OLED.clearDisplay();
+  OLED.stopscroll();
   //Add stuff into the 'display buffer'
   OLED.setTextColor(WHITE);
   OLED.setTextSize(1);
@@ -292,23 +312,26 @@ void setup() {
   strcpy(mqtt_port, custom_mqtt_port.getValue());
   strcpy(mqtt_user, custom_mqtt_user.getValue());
   strcpy(mqtt_pass, custom_mqtt_pass.getValue());
+  strcpy(mqtt_msg,  custom_mqtt_msg.getValue());
 
   Serial.println("MQTT setttings:");
   Serial.println(mqtt_server);
   Serial.println(mqtt_port);
   Serial.println(mqtt_user);
   Serial.println(mqtt_pass);
+  Serial.println(mqtt_msg);
   Serial.println();
 
   //save the custom parameters to FS
   if (shouldSaveConfig) {
     Serial.println("saving config");
-    DynamicJsonDocument doc;
+    DynamicJsonDocument doc(256);
     JsonObject json = doc.to<JsonObject>();
     json["mqtt_server"] = mqtt_server;
     json["mqtt_port"] = mqtt_port;
     json["mqtt_user"] = mqtt_user;
     json["mqtt_pass"] = mqtt_pass;
+    json["mqtt_msg"] = mqtt_msg;
 
     File configFile = SPIFFS.open("/config.json", "w");
     if (!configFile) {
@@ -403,7 +426,7 @@ void reconnect() {
       Serial.println("Connected!");
 #endif
       // Once connected, publish an announcement...
-      client.publish(MESSAGE, "ready");
+      client.publish(mqtt_msg, "ready");
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
@@ -477,7 +500,7 @@ void sendMsg(const char *topic, const char *m)
   #define MSG_LEN 50
   char msg[MSG_LEN];
 
-  snprintf (msg, MSG_LEN, "%s/%s", MESSAGE, topic);
+  snprintf (msg, MSG_LEN, "%s/%s", mqtt_msg, topic);
 #ifdef RX_DEBUG
   Serial.print("Publish message: ");
   Serial.print(msg);
@@ -649,10 +672,10 @@ void sendStatus(void)
   json.replace("$PEAK_3",     par[13]);
 
 #ifdef RX_DEBUG
-  Serial.println(timeClient.getFormattedTime());
-  Serial.println( json );
+//  Serial.println(timeClient.getFormattedTime());
+//  Serial.println( json );
 #endif
-  Serial.println(timeClient.getFormattedTime());
+//  Serial.println(timeClient.getFormattedTime());
   sendMsg("status", json.c_str());
   bSendStatus = false;
 }
@@ -662,6 +685,7 @@ void read3Phase(void)
 {
   uint8_t upd = 0;
   char topic[16];
+  double  kilosNow = 0;
 #ifdef RX_DEBUG
   int n = 0;
   int n1 = 0;
@@ -673,7 +697,7 @@ void read3Phase(void)
   OLED.begin();
   OLED.clearDisplay();
   OLED.setTextColor(WHITE);
-  OLED.setTextSize(2);
+  OLED.setTextSize(0);
   OLED.setCursor(0,0);
 
   for ( int c = 0; c < NR_OF_PHASES; c++) {
@@ -712,8 +736,17 @@ void read3Phase(void)
     startMillis[c] = endMillis[c];
     // How much power has been used ... ?
     double duration = ((double)dTime)/(60*60*1000.0); // Time in hours since last reading
-    kilos[c] += RMSPower[c] * duration / 1000; // So many kWh have been used ...
+    kilosNow = RMSPower[c] * duration; // So many Wh have been used ...
+    kilos[c] += kilosNow/1000;
+    todayPower += kilosNow;
   }
+
+  //Add stuff into the 'display buffer'
+  OLED.setTextSize(1);
+  dtostrf(todayPower,1,1,topic);
+  n1 = strlen(topic);
+  sprintf(topic+n1, "Wh");
+  OLED.println(topic);
 
   OLED.display(); //output 'display buffer' to screen  
 
