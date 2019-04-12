@@ -50,7 +50,7 @@ const char* mqttClient  = "PowerMeterTF";
 #define NR_OF_PHASES  3           // Number of phases to watch
 #define SCT_013_000               // The sensor used
 #define USE_STATUS                // Define to send status message every X minute
-#define STATUS_TIME   15          // Seconds between status messages ...
+#define STATUS_TIME   5*60        // Seconds between status messages ...
 //#############################################################
 
 #ifdef USE_BLINK_INTERRUPT
