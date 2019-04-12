@@ -21,7 +21,7 @@
 //#define FIRST_FLASH
 
 // For the 0.96" OLED display
-#include <Adafruit_GFX.h>attempt
+#include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
 // For timekeeping with correct daylight savings ...
@@ -41,7 +41,7 @@
 //### LOCAL SETTINGS ##########################################
 #include "mySSID.h"               // Include private SSID and password etc ...
 const char* otaHost     = "PowerMeterOTA";
-const char* mqttClient  = "PowerMeterJN";
+const char* mqttClient  = "PowerMeterTF";
 
 #define MESSAGE           "powermeter2" // Default message
 #define RX_DEBUG                  // Some additional printouts ...
@@ -502,7 +502,9 @@ void sendMsg(const char *topic, const char *m)
 
   snprintf (msg, MSG_LEN, "%s/%s", mqtt_msg, topic);
 #ifdef RX_DEBUG
-  Serial.print("Publish message: ");
+  Serial.print("Publish message (");
+  Serial.print(strlen(m));
+  Serial.print("): ");
   Serial.print(msg);
   Serial.print(" ");
   Serial.println(m);
@@ -624,8 +626,7 @@ void sendStatus(void)
   
   // Fill in report
   String json;
-  json = R"(
-    {
+  json = R"({
       "Time": $TIME,
       "ENERGY": {
         "Total": $TOTAL,
@@ -649,8 +650,7 @@ void sendStatus(void)
           "Peak": $PEAK_3
         }
       }
-    }
-  )";
+    })";
 
   local = getNTPtime(); //timeClient.getEpochTime(); //now();
   sprintf(dateBuf, "%d.%02d.%02d %02d:%02d:%02d", year(local), month(local), day(local), hour(local), minute(local), second(local));

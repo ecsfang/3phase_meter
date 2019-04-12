@@ -25,3 +25,8 @@ Some libraries are needed as well:
 
 Note that the EmonLib should be updated to read from an external ADC.<br>
 (TBD: Should update with a link or check-in the changes ...)
+
+Note! PubSublient.h needs to be updated! Increase the following define to 1024:
+
+//#define MQTT_MAX_PACKET_SIZE 128
+#define MQTT_MAX_PACKET_SIZE 1024
