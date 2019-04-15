@@ -109,13 +109,11 @@ bool  bSendStatus = false;
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
+#define SCREEN_ADDRESS (0x78>>1)
 
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
-//#define OLED_RESET   0 // Reset pin # (or -1 if sharing Arduino reset pin)
-//Adafruit_SSD1306 OLED(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
-
-#define OLED_RESET 0  // GPIO0
-Adafruit_SSD1306 OLED(OLED_RESET);
+#define OLED_RESET     0 // Reset pin # (or -1 if sharing Arduino reset pin)
+Adafruit_SSD1306 OLED(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // By default 'pool.ntp.org' is used with 60 seconds update interval and
 // no offset
@@ -143,19 +141,19 @@ char mqtt_pass[16];
 char mqtt_msg[32];
 
 void oled_setup()   {
-  OLED.begin();
+  OLED.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS);
+  OLED.setRotation(1);
   OLED.clearDisplay();
 
   //Add stuff into the 'display buffer'
   OLED.setTextColor(WHITE);
   OLED.setTextSize(2);
   OLED.setCursor(0,0);
-  OLED.println("PowerMeter");
-//  OLED.setTextSize(0);
-//  OLED.println("Check AP!");
+  OLED.println("Power\nMeter");
+  OLED.setTextSize(0);
+  OLED.println("\n\nCheck AP!");
 
   OLED.display(); //output 'display buffer' to screen  
-//  OLED.startscrollleft(0x00, 0x0F); //make display scroll 
 }
 
 void setup() {
