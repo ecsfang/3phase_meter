@@ -6,6 +6,7 @@
 #include <Wire.h>
 #include <SPI.h>
 #include "3phase_adc.h"
+#include "3phase_utils.h"
 
 #include <ESP8266WiFi.h>          //ESP8266 Core WiFi Library (you most likely already have this in your sketch)
 #include <DNSServer.h>            //Local DNS Server used for redirecting all requests to the configuration portal
@@ -20,23 +21,19 @@
 
 //#define FIRST_FLASH
 
-// For the 0.96" OLED display
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
-
 // For timekeeping with correct daylight savings ...
-#include <NTPClient.h>
+/*#include <NTPClient.h>
 #include <time.h>                 // time() ctime()
 #include <sys/time.h>             // struct timeval
 #include <coredecls.h>            // settimeofday_cb()
 #include <Timezone.h>             // https://github.com/JChristensen/Timezone
+*/
 
 // For doing repetitive jobs
 #include <Ticker.h>
 
 // Library for current and power calculations
 #include "EmonLib.h"
-
 
 //### LOCAL SETTINGS ##########################################
 #include "mySSID.h"               // Include private SSID and password etc ...
@@ -46,7 +43,7 @@ const char* mqttClient  = "PowerMeterTF";
 #define MESSAGE           "powermeter2" // Default message
 #define RX_DEBUG                  // Some additional printouts ...
 //#define USE_BLINK_INTERRUPT       // Count blinks on the powermeter
-#define USE_MQTT                  // Remove if running in e.g. a test environment ...
+//#define USE_MQTT                  // Remove if running in e.g. a test environment ...
 #define NR_OF_PHASES  3           // Number of phases to watch
 #define SCT_013_000               // The sensor used
 #define USE_STATUS                // Define to send status message every X minute
@@ -58,9 +55,6 @@ const char* mqttClient  = "PowerMeterTF";
 const int blinkPin =  D0;
 #endif
 
-// The pins connected to the I2C connector (display)
-//const int sclPin =            D1;
-//const int sdaPin =            D2;
 
 #if defined(SCT_013_000)
   // Settings for the YHDC SCT-013-000 CT sensor
@@ -107,13 +101,9 @@ WiFiUDP ntpUDP;
 Ticker flipper;
 bool  bSendStatus = false;
 
-#define SCREEN_WIDTH 128 // OLED display width, in pixels
-#define SCREEN_HEIGHT 64 // OLED display height, in pixels
-#define SCREEN_ADDRESS (0x78>>1)
+extern Adafruit_SSD1306 OLED;
 
-// Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
-#define OLED_RESET     0 // Reset pin # (or -1 if sharing Arduino reset pin)
-Adafruit_SSD1306 OLED(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+//#define DRAW_ROTATING_DISC
 
 // By default 'pool.ntp.org' is used with 60 seconds update interval and
 // no offset
@@ -135,26 +125,11 @@ void saveConfigCallback () {
 }
 
 char mqtt_server[40];
-char mqtt_port[6] = "8080";
+char mqtt_port[6] = "1883";
 char mqtt_user[16];
 char mqtt_pass[16];
 char mqtt_msg[32];
 
-void oled_setup()   {
-  OLED.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS);
-  OLED.setRotation(1);
-  OLED.clearDisplay();
-
-  //Add stuff into the 'display buffer'
-  OLED.setTextColor(WHITE);
-  OLED.setTextSize(2);
-  OLED.setCursor(0,0);
-  OLED.println("Power\nMeter");
-  OLED.setTextSize(0);
-  OLED.println("\n\nCheck AP!");
-
-  OLED.display(); //output 'display buffer' to screen  
-}
 
 void setup() {
 
@@ -465,6 +440,12 @@ void loop()
     bBlink = false;
   }
 
+#ifdef DRAW_ROTATING_DISC
+  OLED.fillRect(1, 0, Wm, SCREEN_HEIGHT, BLACK);
+#else
+  OLED.fillRect(0, 0, Wm, SCREEN_HEIGHT, BLACK);
+#endif
+
   // Get current time ...
   local = getNTPtime();
   if( hour(local) != prevHour ) {
@@ -576,120 +557,22 @@ void runAtMidnight(void)
   }
 }
 
-#define SENSOR_PAR_CNT (NR_OF_PHASES*4+2)
-#define BUF_LEN 1024
-
 void doSendStatus(void)
 {
   bSendStatus = true;
 }
 
-void sendStatus(void)
-{
-  char  values[BUF_LEN];
-  char  dateBuf[32];
-  int   n = 0;
-
-  // Param 0
-  n = sprintf(values, "VALUES:%ld;", todayPower);
-  // Param 1
-  n += sprintf(values+n, "%ld;", yesterdayPower);
-
-  for( int c=0; c<NR_OF_PHASES; c++ ) {
-    // CURRENT
-    dtostrf(irms[c],1,1,values+n);
-    n = strlen(values);
-    n += sprintf(values+n, ";");
-    // POWER
-    n += sprintf(values+n, "%d;", RMSPower[c]);
-    // TODAY
-    dtostrf(kilos[c],1,1,values+n);
-    n = strlen(values);
-    n += sprintf(values+n, ";");
-    // PEAK
-    dtostrf(peakCurrent[c],1,1,values+n);
-    n = strlen(values);
-    n += sprintf(values+n, ";");
-  }
-
-  // Let par point into the values string on the different values
-  char *par[SENSOR_PAR_CNT];
-  uint8_t cnt = 0;
-  char *p = strstr(values, ":");
-  while (p && cnt < SENSOR_PAR_CNT) {
-    *(p++) = 0;
-    par[cnt++] = p;
-    p = strchr(p, ';');
-  }
-  
-  // Fill in report
-  String json;
-  json = R"({
-      "Time": $TIME,
-      "ENERGY": {
-        "Total": $TOTAL,
-        "Yesterday":$YDAY,
-        "Phase1": {
-          "Today": $TODAY_1,
-          "Current": $CURRENT_1,
-          "Power": $POWER_1,
-          "Peak": $PEAK_1
-        },
-        "Phase2": {
-          "Today": $TODAY_2,
-          "Current": $CURRENT_2,
-          "Power": $POWER_2,
-          "Peak": $PEAK_2
-        },
-        "Phase3": {
-          "Today": $TODAY_3,
-          "Current": $CURRENT_3,
-          "Power": $POWER_3,
-          "Peak": $PEAK_3
-        }
-      }
-    })";
-
-  local = getNTPtime(); //timeClient.getEpochTime(); //now();
-  sprintf(dateBuf, "%d.%02d.%02d %02d:%02d:%02d", year(local), month(local), day(local), hour(local), minute(local), second(local));
-
-  json.replace("$TIME",       dateBuf);
-  json.replace("$TOTAL",      par[0]);
-  json.replace("$YDAY",       par[1]);
-  json.replace("$CURRENT_1",  par[2]);
-  json.replace("$POWER_1",    par[3]);
-  json.replace("$TODAY_1",    par[4]);
-  json.replace("$PEAK_1",     par[5]);
-  json.replace("$CURRENT_2",  par[6]);
-  json.replace("$POWER_2",    par[7]);
-  json.replace("$TODAY_2",    par[8]);
-  json.replace("$PEAK_2",     par[9]);
-  json.replace("$CURRENT_3",  par[10]);
-  json.replace("$POWER_3",    par[11]);
-  json.replace("$TODAY_3",    par[12]);
-  json.replace("$PEAK_3",     par[13]);
-
-#ifdef RX_DEBUG
-//  Serial.println(timeClient.getFormattedTime());
-//  Serial.println( json );
-#endif
-//  Serial.println(timeClient.getFormattedTime());
-  sendMsg("status", json.c_str());
-  bSendStatus = false;
-}
-
-
 void read3Phase(void)
 {
   uint8_t upd = 0;
   char topic[16];
-  double  kilosNow = 0;
+  double  wattNow = 0;
 #ifdef RX_DEBUG
   int n = 0;
-  int n1 = 0;
   char buffer[128];
 #endif
-
+  int   iCurr;
+  
   digitalWrite(LED_BUILTIN, LOW);
 
   OLED.begin();
@@ -698,26 +581,24 @@ void read3Phase(void)
   OLED.setTextSize(0);
   OLED.setCursor(0,0);
 
+  // For each phase ...
   for ( int c = 0; c < NR_OF_PHASES; c++) {
     // Read the current value of phase 'c'
     irms[c] = ct[c].calcIrms(1480);
     RMSPower[c] = 230*irms[c];
 
-    //Add stuff into the 'display buffer'
-    n1 = sprintf(topic, "F%d: ", c+1);
-    dtostrf(irms[c],1,2,topic+n1);
-    n1 = strlen(topic);
-    sprintf(topic+n1, "A");
-    OLED.println(topic);
+    // Draw a bar with value on the display corresponding to the current
+    DrawBar(c, irms[c]);
 
 #ifdef RX_DEBUG
+    // Add current to log buffer ...
     dtostrf(irms[c],1,2,buffer+n);
     n = strlen(buffer);
     n += sprintf(buffer+n, "  ");
 #endif
 
+    // If current has changed significantly, mark it for update!
     if( change(irms[c], oldIrms[c], DELTA_AMP) ) {
-      // Value has changed - mark for update!
       upd |= 1<<c;
       oldIrms[c] = irms[c];
     }
@@ -732,19 +613,16 @@ void read3Phase(void)
     endMillis[c] = millis();
     unsigned long dTime = (endMillis[c] - startMillis[c]);
     startMillis[c] = endMillis[c];
+
     // How much power has been used ... ?
     double duration = ((double)dTime)/(60*60*1000.0); // Time in hours since last reading
-    kilosNow = RMSPower[c] * duration; // So many Wh have been used ...
-    kilos[c] += kilosNow/1000;
-    todayPower += kilosNow;
+    wattNow = RMSPower[c] * duration; // So many Wh have been used ...
+    kilos[c] += wattNow/1000;
+    todayPower += wattNow;
   }
 
+  DrawPower(todayPower);
   //Add stuff into the 'display buffer'
-  OLED.setTextSize(1);
-  dtostrf(todayPower,1,1,topic);
-  n1 = strlen(topic);
-  sprintf(topic+n1, "Wh");
-  OLED.println(topic);
 
   OLED.display(); //output 'display buffer' to screen  
 
