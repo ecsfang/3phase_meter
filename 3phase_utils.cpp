@@ -2,7 +2,6 @@
 // For the 0.96" OLED display
 #include "3phase_utils.h"
 
-
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
 #define OLED_RESET     0 // Reset pin # (or -1 if sharing Arduino reset pin)
 Adafruit_SSD1306 OLED(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
@@ -17,8 +16,10 @@ void oled_setup()   {
   OLED.setTextSize(2);
   OLED.setCursor(0,0);
   OLED.println("Power\nMeter");
-
+  OLED.startscrollleft(0x00, 0x0F); //make display scroll 
   OLED.display(); //output 'display buffer' to screen  
+  ClrDisplay();
+  OLED.setRotation(0);
 }
 
 float scale(float f)
@@ -28,6 +29,19 @@ float scale(float f)
 
 int iMax[3] = {0,0,0};  // Used to draw max-indicator
 int del[3];             // Delay to remove max indicator
+
+void ClrDisplay(void)
+{
+  OLED.clearDisplay();
+  OLED.setTextColor(WHITE);
+  OLED.setTextSize(0);
+  OLED.setCursor(0,0);
+}
+
+void UpdateDisplay(void)
+{
+  OLED.display(); //output 'display buffer' to screen  
+}
 
 void DrawBar(int r, float val)
 {

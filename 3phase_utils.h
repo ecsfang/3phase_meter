@@ -20,12 +20,14 @@
 #define WB    10    // Width of bar (height)
 #define WH    (SCREEN_WIDTH-Wm) // Total length of bar
 
-#define Wst   3     // Top screen to bar
+#define Wst   2     // Top screen to bar
 #define Woff  24    // Offset to next bar
 
 void sendStatus(void);
 
 void oled_setup(void);
+void ClrDisplay(void);
+void UpdateDisplay(void);
 void DrawPhase(double f, int i);
 // Draw number at end of display
 void DrawPower(double p);

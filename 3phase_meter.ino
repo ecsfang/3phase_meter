@@ -13,21 +13,10 @@
 #include <ESP8266WebServer.h>     //Local WebServer used to serve the configuration portal
 #include <WiFiManager.h>          //https://github.com/tzapu/WiFiManager WiFi Configuration Magic
 
-
 #include <ArduinoJson.h>          //https://github.com/bblanchon/ArduinoJson
 
 #include <ArduinoOTA.h>
 #include <PubSubClient.h>
-
-//#define FIRST_FLASH
-
-// For timekeeping with correct daylight savings ...
-/*#include <NTPClient.h>
-#include <time.h>                 // time() ctime()
-#include <sys/time.h>             // struct timeval
-#include <coredecls.h>            // settimeofday_cb()
-#include <Timezone.h>             // https://github.com/JChristensen/Timezone
-*/
 
 // For doing repetitive jobs
 #include <Ticker.h>
@@ -43,11 +32,13 @@ const char* mqttClient  = "PowerMeterTF";
 #define MESSAGE           "powermeter2" // Default message
 #define RX_DEBUG                  // Some additional printouts ...
 //#define USE_BLINK_INTERRUPT       // Count blinks on the powermeter
-//#define USE_MQTT                  // Remove if running in e.g. a test environment ...
 #define NR_OF_PHASES  3           // Number of phases to watch
 #define SCT_013_000               // The sensor used
 #define USE_STATUS                // Define to send status message every X minute
 #define STATUS_TIME   5*60        // Seconds between status messages ...
+//#define USE_MQTT                  // Remove if running in e.g. a test environment ...
+//#define FIRST_FLASH
+#define USE_TEST_DATA
 //#############################################################
 
 #ifdef USE_BLINK_INTERRUPT
@@ -103,7 +94,7 @@ bool  bSendStatus = false;
 
 extern Adafruit_SSD1306 OLED;
 
-//#define DRAW_ROTATING_DISC
+#define DRAW_ROTATING_DISC
 
 // By default 'pool.ntp.org' is used with 60 seconds update interval and
 // no offset
@@ -257,8 +248,8 @@ void setup() {
 
   OLED.display(); //output 'display buffer' to screen  
   OLED.startscrollleft(0x00, 0x0F); //make display scroll 
-
   
+#ifndef USE_TEST_DATA
   if (!wifiManager.autoConnect("AutoConnectAP", "password")) {
     Serial.println("failed to connect and hit timeout");
     delay(3000);
@@ -266,6 +257,7 @@ void setup() {
     ESP.reset();
     delay(5000);
   }
+#endif
 
   OLED.clearDisplay();
   OLED.stopscroll();
@@ -274,8 +266,9 @@ void setup() {
   OLED.setTextSize(1);
   OLED.setCursor(0,10);
   OLED.println("Connected!");
+  UpdateDisplay();
 
-  OLED.display(); //output 'display buffer' to screen  
+  ClrDisplay();
 
   //if you get here you have connected to the WiFi
   Serial.println("connected...yeey :)");
@@ -330,8 +323,9 @@ void setup() {
     ct[i].current(sctPin[i], CORR_CURRENT);
   }
 
-  Serial.println(F("Init OTA ..."));
 
+#ifdef USE_MQTT
+  Serial.println(F("Init OTA ..."));
   ArduinoOTA.setHostname(otaHost);
   ArduinoOTA.setPassword(flashpw);
 
@@ -372,6 +366,7 @@ void setup() {
   Serial.println("Ready");
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
+#endif
 
 //  setSyncProvider( getNTPtime );
   timeClient.begin();
@@ -412,58 +407,75 @@ void reconnect() {
 
 bool bBlink = false;
 int blinkCnt = 0;
-int tCnt = 0;
+unsigned int tCnt = 0;
 time_t local = 0;
+int pix = 0;
 
 void loop()
 {
   static int  prevHour = 0;
 
-  if( (tCnt % 10) == 0 )
+  if( (tCnt % 100000) == 0 )
     timeClient.update();
 
+  if( (tCnt % 100) == 0 ) {
 #ifdef USE_MQTT
-  if (!client.connected())
-    reconnect();
+    if (!client.connected())
+      reconnect();
 
-  if (client.connected())
-    client.loop();
+    if (client.connected())
+      client.loop();
 #endif
 
-  ArduinoOTA.handle();
-
-  if ( bBlink ) {
-#ifdef RX_DEBUG
-    Serial.print("Blinks: ");
-    Serial.println(blinkCnt);
-#endif
-    bBlink = false;
+    ArduinoOTA.handle();
   }
-
+  
+  if( (tCnt % 10) == 0 ) {
 #ifdef DRAW_ROTATING_DISC
-  OLED.fillRect(1, 0, Wm, SCREEN_HEIGHT, BLACK);
-#else
-  OLED.fillRect(0, 0, Wm, SCREEN_HEIGHT, BLACK);
+    // Draw moving line at bottom
+    OLED.writePixel(pix,63, WHITE);
+    pix++;
+    pix = pix % SCREEN_WIDTH;
+    OLED.writePixel((pix+SCREEN_WIDTH-10)%SCREEN_WIDTH, 63, BLACK);
+    UpdateDisplay();
 #endif
 
-  // Get current time ...
-  local = getNTPtime();
-  if( hour(local) != prevHour ) {
-    // New hour ...
-    if( hour(local) == 0 && prevHour == 24 ) {
-      // Just passed midnight ... ;)
-      runAtMidnight();
-    }
-    prevHour = hour(local);
   }
 
-//  testADC();
-  read3Phase();
-
-  if( bSendStatus )
-    sendStatus();
-
-  delay(delayTime);
+  if( (tCnt % 100) == 0 ) {
+  
+    if ( bBlink ) {
+#ifdef RX_DEBUG
+      Serial.print("Blinks: ");
+      Serial.println(blinkCnt);
+#endif
+      bBlink = false;
+    }
+  
+  #ifdef DRAW_ROTATING_DISC
+    OLED.fillRect(0, 0, Wm, SCREEN_HEIGHT-1, BLACK);
+  #else
+    OLED.fillRect(0, 0, Wm, SCREEN_HEIGHT, BLACK);
+  #endif
+  
+    // Get current time ...
+    local = getNTPtime();
+    if( hour(local) != prevHour ) {
+      // New hour ...
+      if( hour(local) == 0 && prevHour == 24 ) {
+        // Just passed midnight ... ;)
+        runAtMidnight();
+      }
+      prevHour = hour(local);
+    }
+  
+  //  testADC();
+    read3Phase();
+  
+    if( bSendStatus )
+      sendStatus();
+  }
+//  delay(delayTime);
   tCnt++;
 }
 
@@ -575,16 +587,14 @@ void read3Phase(void)
   
   digitalWrite(LED_BUILTIN, LOW);
 
-  OLED.begin();
-  OLED.clearDisplay();
-  OLED.setTextColor(WHITE);
-  OLED.setTextSize(0);
-  OLED.setCursor(0,0);
-
   // For each phase ...
   for ( int c = 0; c < NR_OF_PHASES; c++) {
     // Read the current value of phase 'c'
+#ifdef USE_TEST_DATA
+    irms[c] = rand()%30;
+#else
     irms[c] = ct[c].calcIrms(1480);
+#endif
     RMSPower[c] = 230*irms[c];
 
     // Draw a bar with value on the display corresponding to the current
@@ -624,7 +634,8 @@ void read3Phase(void)
   DrawPower(todayPower);
   //Add stuff into the 'display buffer'
 
-  OLED.display(); //output 'display buffer' to screen  
+  Serial.println("Update display!");
+  UpdateDisplay();
 
 #ifdef RX_DEBUG
   Serial.println(buffer);
