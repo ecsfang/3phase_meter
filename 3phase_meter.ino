@@ -1,5 +1,10 @@
 /***************************************************************************
   POWER METER - with 3 phases and blink detection
+
+  Arduino settings:
+  Card:       Lolin (Wemos) D1 R2 & mini
+  Flash Size: 4M (1M Spiffs)
+
  ***************************************************************************/
 #include <FS.h>                   //this needs to be first, or it all crashes and burns...
 
@@ -36,9 +41,10 @@ const char* mqttClient  = "PowerMeterTF";
 #define SCT_013_000               // The sensor used
 #define USE_STATUS                // Define to send status message every X minute
 #define STATUS_TIME   5*60        // Seconds between status messages ...
-//#define USE_MQTT                  // Remove if running in e.g. a test environment ...
+#define USE_MQTT                  // Remove if running in e.g. a test environment ...
 //#define FIRST_FLASH
-#define USE_TEST_DATA
+//#define USE_TEST_DATA
+//#define USE_DISPLAY
 //#############################################################
 
 #ifdef USE_BLINK_INTERRUPT
@@ -92,9 +98,10 @@ WiFiUDP ntpUDP;
 Ticker flipper;
 bool  bSendStatus = false;
 
+#ifdef USE_DISPLAY
 extern Adafruit_SSD1306 OLED;
-
 #define DRAW_ROTATING_DISC
+#endif
 
 // By default 'pool.ntp.org' is used with 60 seconds update interval and
 // no offset
@@ -117,14 +124,16 @@ void saveConfigCallback () {
 
 char mqtt_server[40];
 char mqtt_port[6] = "1883";
-char mqtt_user[16];
-char mqtt_pass[16];
+char mqtt_user[32];
+char mqtt_pass[32];
 char mqtt_msg[32];
 
 
 void setup() {
 
+#ifdef USE_DISPLAY
   oled_setup();
+#endif
 
   Serial.begin(115200);
   delay(3000);
@@ -239,6 +248,7 @@ void setup() {
   //here  "AutoConnectAP"
   //and goes into a blocking loop awaiting configuration
 
+#ifdef USE_DISPLAY
   OLED.clearDisplay();
   //Add stuff into the 'display buffer'
   OLED.setTextColor(WHITE);
@@ -248,6 +258,7 @@ void setup() {
 
   OLED.display(); //output 'display buffer' to screen  
   OLED.startscrollleft(0x00, 0x0F); //make display scroll 
+#endif
   
 #ifndef USE_TEST_DATA
   if (!wifiManager.autoConnect("AutoConnectAP", "password")) {
@@ -259,6 +270,7 @@ void setup() {
   }
 #endif
 
+#ifdef USE_DISPLAY
   OLED.clearDisplay();
   OLED.stopscroll();
   //Add stuff into the 'display buffer'
@@ -269,6 +281,7 @@ void setup() {
   UpdateDisplay();
 
   ClrDisplay();
+#endif
 
   //if you get here you have connected to the WiFi
   Serial.println("connected...yeey :)");
@@ -389,7 +402,7 @@ void reconnect() {
     Serial.print("Attempting another MQTT connection...");
 #endif
     // Attempt to connect
-    if (client.connect(mqttClient)) {
+    if (client.connect(mqttClient, mqtt_user, mqtt_pass)) {
 #ifdef RX_DEBUG
       Serial.println("Connected!");
 #endif
@@ -430,6 +443,7 @@ void loop()
     ArduinoOTA.handle();
   }
   
+#ifdef USE_DISPLAY
   if( (tCnt % 10) == 0 ) {
 #ifdef DRAW_ROTATING_DISC
     // Draw moving line at bottom
@@ -439,8 +453,8 @@ void loop()
     OLED.writePixel((pix+SCREEN_WIDTH-10)%SCREEN_WIDTH, 63, BLACK);
     UpdateDisplay();
 #endif
-
   }
+#endif
 
   if( (tCnt % 100) == 0 ) {
   
@@ -452,11 +466,13 @@ void loop()
       bBlink = false;
     }
   
+#ifdef USE_DISPLAY
   #ifdef DRAW_ROTATING_DISC
     OLED.fillRect(0, 0, Wm, SCREEN_HEIGHT-1, BLACK);
   #else
     OLED.fillRect(0, 0, Wm, SCREEN_HEIGHT, BLACK);
   #endif
+#endif
   
     // Get current time ...
     local = getNTPtime();
@@ -597,8 +613,10 @@ void read3Phase(void)
 #endif
     RMSPower[c] = 230*irms[c];
 
+#ifdef USE_DISPLAY
     // Draw a bar with value on the display corresponding to the current
     DrawBar(c, irms[c]);
+#endif
 
 #ifdef RX_DEBUG
     // Add current to log buffer ...
@@ -631,11 +649,11 @@ void read3Phase(void)
     todayPower += wattNow;
   }
 
-  DrawPower(todayPower);
+#ifdef USE_DISPLAY
   //Add stuff into the 'display buffer'
-
-  Serial.println("Update display!");
+  DrawPower(todayPower);
   UpdateDisplay();
+#endif
 
 #ifdef RX_DEBUG
   Serial.println(buffer);
