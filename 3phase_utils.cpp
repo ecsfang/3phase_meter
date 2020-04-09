@@ -164,6 +164,9 @@ void sendStatus(void)
     par[cnt++] = p;
     p = strchr(p, ';');
   }
+  // Get rid of last ';' ... !
+  if( p && *p == ';' )
+    *p = 0;
   
   // Fill in report
   String json;
@@ -194,7 +197,7 @@ void sendStatus(void)
     })";
 
   local = getNTPtime(); //timeClient.getEpochTime(); //now();
-  sprintf(dateBuf, "%d.%02d.%02d %02d:%02d:%02d", year(local), month(local), day(local), hour(local), minute(local), second(local));
+  sprintf(dateBuf, "\"%d.%02d.%02d %02d:%02d:%02d\"", year(local), month(local), day(local), hour(local), minute(local), second(local));
 
   json.replace("$TIME",       dateBuf);
   json.replace("$TOTAL",      par[0]);

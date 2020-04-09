@@ -582,6 +582,7 @@ void runAtMidnight(void)
     yesterdayPower += (unsigned long)kilos[c];
     kilos[c] = 0.0;
     peakPower[c] = 0;
+    peakCurrent[c] = 0;
   }
 }
 
@@ -660,12 +661,15 @@ void read3Phase(void)
 #endif
 
   if( upd ) { // Have updates to send ...
-    for ( int c = 0; c < NR_OF_PHASES; c++) {
+/*    for ( int c = 0; c < NR_OF_PHASES; c++) {
       if( upd & (1<<c) ) {
         sprintf(topic, "phase_%d", c+1);
         sendMsgF(topic, irms[c]);
       }
-    }
+    }*/
+    char fBuf[64];
+    sprintf(fBuf, "{\"l1\":%.2f,\"l2\":%.2f,\"l3\":%.2f}", irms[0], irms[1], irms[2]);
+    sendMsg("current",fBuf);
   }
 
   digitalWrite(LED_BUILTIN, HIGH);
