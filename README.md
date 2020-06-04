@@ -22,6 +22,7 @@ Some libraries are needed as well:
 * ESP8266 - configuration of the board
 * PubSubClient - to be able to use MQTT
 * EmonLib - For current and power calculations
+* ArduinoJson (ver >= 6)
 
 Note that the EmonLib should be updated to read from an external ADC.<br>
 (TBD: Should update with a link or check-in the changes ...)
