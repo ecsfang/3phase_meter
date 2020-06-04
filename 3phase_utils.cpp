@@ -111,13 +111,12 @@ String Format(double val, int dec, int dig )
 
 // Current values ...
 extern double        irms[NR_OF_PHASES];
-extern unsigned long RMSPower[NR_OF_PHASES];       // Current power (W)
-extern double        peakCurrent[NR_OF_PHASES];    // Peak current (per day)
-extern unsigned long peakPower[NR_OF_PHASES];      // Peak power (per day)
-extern double        kilos[NR_OF_PHASES];          // Total kWh today (per phase)
-extern unsigned long todayPower;                   // Todays total
-extern unsigned long yesterdayPower;               // Yesterdays total
-
+extern unsigned long RMSPower[NR_OF_PHASES];      // Current power (W)
+extern double        peakCurrent[NR_OF_PHASES];   // Peak current (per day)
+extern unsigned long peakPower[NR_OF_PHASES];     // Peak power (per day)
+extern double        kilos[NR_OF_PHASES];         // Total kWh today (per phase)
+extern unsigned long getTodayPower(void);         // Todays total
+extern unsigned long getYesterdayPower(void);     // Yesterdays total
 extern time_t  getNTPtime(void);
 
 extern void sendMsg(const char *topic, const char *m);
@@ -134,25 +133,25 @@ void sendStatus(void)
   time_t local = 0;
 
   // Param 0
-  n = sprintf(values, "VALUES:%ld;", todayPower);
+  n = sprintf(values, "VALUES:%ld", getTodayPower());
   // Param 1
-  n += sprintf(values+n, "%ld;", yesterdayPower);
+  n += sprintf(values+n, ";%ld", getYesterdayPower());
 
   for( int c=0; c<NR_OF_PHASES; c++ ) {
     // CURRENT
+    n += sprintf(values+n, ";");
     dtostrf(irms[c],1,1,values+n);
     n = strlen(values);
-    n += sprintf(values+n, ";");
     // POWER
-    n += sprintf(values+n, "%d;", RMSPower[c]);
+    n += sprintf(values+n, ";%d", RMSPower[c]);
     // TODAY
+    n += sprintf(values+n, ";");
     dtostrf(kilos[c],1,1,values+n);
     n = strlen(values);
-    n += sprintf(values+n, ";");
     // PEAK
+    n += sprintf(values+n, ";");
     dtostrf(peakCurrent[c],1,1,values+n);
     n = strlen(values);
-    n += sprintf(values+n, ";");
   }
 
   // Let par point into the values string on the different values
@@ -164,9 +163,6 @@ void sendStatus(void)
     par[cnt++] = p;
     p = strchr(p, ';');
   }
-  // Get rid of last ';' ... !
-  if( p && *p == ';' )
-    *p = 0;
   
   // Fill in report
   String json;

@@ -6,19 +6,19 @@
   Flash Size: 4M (1M Spiffs)
 
  ***************************************************************************/
-#include <FS.h>                   //this needs to be first, or it all crashes and burns...
+#include <FS.h> //this needs to be first, or it all crashes and burns...
 
 #include <Wire.h>
 #include <SPI.h>
 #include "3phase_adc.h"
 #include "3phase_utils.h"
 
-#include <ESP8266WiFi.h>          //ESP8266 Core WiFi Library (you most likely already have this in your sketch)
-#include <DNSServer.h>            //Local DNS Server used for redirecting all requests to the configuration portal
-#include <ESP8266WebServer.h>     //Local WebServer used to serve the configuration portal
-#include <WiFiManager.h>          //https://github.com/tzapu/WiFiManager WiFi Configuration Magic
+#include <ESP8266WiFi.h>      //ESP8266 Core WiFi Library (you most likely already have this in your sketch)
+#include <DNSServer.h>        //Local DNS Server used for redirecting all requests to the configuration portal
+#include <ESP8266WebServer.h> //Local WebServer used to serve the configuration portal
+#include <WiFiManager.h>      //https://github.com/tzapu/WiFiManager WiFi Configuration Magic
 
-#include <ArduinoJson.h>          //https://github.com/bblanchon/ArduinoJson
+#include <ArduinoJson.h> //https://github.com/bblanchon/ArduinoJson
 
 #include <ArduinoOTA.h>
 #include <PubSubClient.h>
@@ -30,55 +30,54 @@
 #include "EmonLib.h"
 
 //### LOCAL SETTINGS ##########################################
-#include "mySSID.h"               // Include private SSID and password etc ...
-const char* otaHost     = "PowerMeterOTA";
-const char* mqttClient  = "PowerMeterTF";
+#include "mySSID.h" // Include private SSID and password etc ...
+const char *otaHost = "PowerMeterOTA";
+const char *mqttClient = "PowerMeterTF";
 
-#define MESSAGE           "powermeter2" // Default message
-#define RX_DEBUG                  // Some additional printouts ...
+#define MESSAGE "powermeter2" // Default message
+#define RX_DEBUG              // Some additional printouts ...
 //#define USE_BLINK_INTERRUPT       // Count blinks on the powermeter
-#define NR_OF_PHASES  3           // Number of phases to watch
-#define SCT_013_000               // The sensor used
-#define USE_STATUS                // Define to send status message every X minute
-#define STATUS_TIME   5*60        // Seconds between status messages ...
-#define USE_MQTT                  // Remove if running in e.g. a test environment ...
+#define NR_OF_PHASES 3     // Number of phases to watch
+#define SCT_013_000        // The sensor used
+#define USE_STATUS         // Define to send status message every X minute
+#define STATUS_TIME 5 * 60 // Seconds between status messages ...
+#define USE_MQTT           // Remove if running in e.g. a test environment ...
 //#define FIRST_FLASH
 //#define USE_TEST_DATA
-//#define USE_DISPLAY
+#define USE_DISPLAY
 //#############################################################
 
 #ifdef USE_BLINK_INTERRUPT
 // The blinking LED on the energy meter could be connected here ...
-const int blinkPin =  D0;
+const int blinkPin = D0;
 #endif
 
-
 #if defined(SCT_013_000)
-  // Settings for the YHDC SCT-013-000 CT sensor
-  // Measure current (50mA equal to 100A through the sensor)
-  #define IP  100       // 100 A
-  #define IPC 0.05      // 50 mA
-  #define RT  (IP/IPC)  // Rt = 100 A ÷ 50 mA = 2000
-  #define RB  120        // Burden resistor
-  #define CORR_CURRENT  (RT/RB)
+// Settings for the YHDC SCT-013-000 CT sensor
+// Measure current (50mA equal to 100A through the sensor)
+#define IP 100        // 100 A
+#define IPC 0.05      // 50 mA
+#define RT (IP / IPC) // Rt = 100 A ÷ 50 mA = 2000
+#define RB 120        // Burden resistor
+#define CORR_CURRENT (RT / RB)
 #elif defined(SCT_013_030)
-  // Settings for the YHDC SCT-013-030 CT sensor
-  // Measure voltage (1V equal to 30A through the sensor)
-  // Ip is the rated primary current, and Vs is the output voltage at that current, then
-  // current constant = Ip ÷ Vs
-  // and for the YHDC SCT-013-000 CT sensor:
-  #define IP  30        // 30 A
-  #define VS  1   // 1V
-  #define CORR_CURRENT  (IP/VS)
+// Settings for the YHDC SCT-013-030 CT sensor
+// Measure voltage (1V equal to 30A through the sensor)
+// Ip is the rated primary current, and Vs is the output voltage at that current, then
+// current constant = Ip ÷ Vs
+// and for the YHDC SCT-013-000 CT sensor:
+#define IP 30 // 30 A
+#define VS 1  // 1V
+#define CORR_CURRENT (IP / VS)
 #else
-  #error Must select which sensor to use!
+#error Must select which sensor to use!
 #endif
 
 // Create  instances for each CT channel
 EnergyMonitor ct[NR_OF_PHASES];
 
 // The pins connected to the sensors
-int sctPin[NR_OF_PHASES] = { ADC_CH0, ADC_CH1, ADC_CH2 };
+int sctPin[NR_OF_PHASES] = {ADC_CH0, ADC_CH1, ADC_CH2};
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -87,8 +86,8 @@ PubSubClient client(espClient);
 unsigned long delayTime = 1000;
 
 // Set up summer/winter-time rules
-TimeChangeRule CEST = {"", Last, Sun, Mar, 2, 120};     
-TimeChangeRule CET = {"", Last, Sun, Oct, 3, 60}; 
+TimeChangeRule CEST = {"", Last, Sun, Mar, 2, 120};
+TimeChangeRule CET = {"", Last, Sun, Oct, 3, 60};
 
 Timezone CE(CEST, CET);
 TimeChangeRule *tcr;
@@ -96,7 +95,7 @@ TimeChangeRule *tcr;
 WiFiUDP ntpUDP;
 
 Ticker flipper;
-bool  bSendStatus = false;
+bool bSendStatus = false;
 
 #ifdef USE_DISPLAY
 extern Adafruit_SSD1306 OLED;
@@ -107,9 +106,10 @@ extern Adafruit_SSD1306 OLED;
 // no offset
 NTPClient timeClient(ntpUDP);
 
-uint32_t seconds(void) { return millis()/1000; }
+uint32_t seconds(void) { return millis() / 1000; }
 
-time_t  getNTPtime(void) {
+time_t getNTPtime(void)
+{
   return CE.toLocal(timeClient.getEpochTime(), &tcr);
 }
 
@@ -117,7 +117,8 @@ time_t  getNTPtime(void) {
 bool shouldSaveConfig = false;
 
 // Callback notifying us of the need to save config
-void saveConfigCallback () {
+void saveConfigCallback()
+{
   Serial.println("Should save config");
   shouldSaveConfig = true;
 }
@@ -128,8 +129,8 @@ char mqtt_user[32];
 char mqtt_pass[32];
 char mqtt_msg[32];
 
-
-void setup() {
+void setup()
+{
 
 #ifdef USE_DISPLAY
   oled_setup();
@@ -147,17 +148,17 @@ void setup() {
 #endif
 
   Serial.println(F("Blink LEDs ..."));
-  for(int i=0; i<4; i++) {
-    digitalWrite(LED_BUILTIN, LOW);  // On ...
+  for (int i = 0; i < 4; i++) {
+    digitalWrite(LED_BUILTIN, LOW); // On ...
     delay(100);
-    digitalWrite(LED_BUILTIN, HIGH);  // Off ...
+    digitalWrite(LED_BUILTIN, HIGH); // Off ...
     delay(100);
   }
 
-  sprintf( mqtt_msg, "%s", MESSAGE);
+  sprintf(mqtt_msg, "%s", MESSAGE);
 
 #ifdef FIRST_FLASH
-  //clean FS for testing 
+  //clean FS for testing
   SPIFFS.format();
 #endif
 
@@ -189,7 +190,7 @@ void setup() {
           strcpy(mqtt_port, json["mqtt_port"]);
           strcpy(mqtt_user, json["mqtt_user"]);
           strcpy(mqtt_pass, json["mqtt_pass"]);
-          strcpy(mqtt_msg,  json["mqtt_msg"]);
+          strcpy(mqtt_msg, json["mqtt_msg"]);
         } else {
           Serial.println("failed to load json config");
         }
@@ -207,14 +208,14 @@ void setup() {
   WiFiManagerParameter custom_mqtt_port("port", "mqtt port", mqtt_port, 6);
   WiFiManagerParameter custom_mqtt_user("user", "mqtt user", mqtt_user, 20);
   WiFiManagerParameter custom_mqtt_pass("pass", "mqtt pass", mqtt_pass, 20);
-  WiFiManagerParameter custom_mqtt_msg("msg",   "mqtt msg",  mqtt_msg, 30);
+  WiFiManagerParameter custom_mqtt_msg("msg", "mqtt msg", mqtt_msg, 30);
 
   //WiFiManager
   //Local intialization. Once its business is done, there is no need to keep it around
   WiFiManager wifiManager;
 
 #ifdef FIRST_FLASH
-  // Reset Wifi settings for testing  
+  // Reset Wifi settings for testing
   wifiManager.resetSettings();
 #endif
 
@@ -222,8 +223,8 @@ void setup() {
   wifiManager.setSaveConfigCallback(saveConfigCallback);
 
   //set static ip
-//  wifiManager.setSTAStaticIPConfig(IPAddress(10,0,1,99), IPAddress(10,0,1,1), IPAddress(255,255,255,0));
-  
+  //  wifiManager.setSTAStaticIPConfig(IPAddress(10,0,1,99), IPAddress(10,0,1,1), IPAddress(255,255,255,0));
+
   //add all your parameters here
   wifiManager.addParameter(&custom_mqtt_server);
   wifiManager.addParameter(&custom_mqtt_port);
@@ -237,7 +238,7 @@ void setup() {
   //set minimum quality of signal so it ignores AP's under that quality
   //defaults to 8%
   //wifiManager.setMinimumSignalQuality();
-  
+
   //sets timeout until configuration portal gets turned off
   //useful to make it all retry or go to sleep
   //in seconds
@@ -253,13 +254,13 @@ void setup() {
   //Add stuff into the 'display buffer'
   OLED.setTextColor(WHITE);
   OLED.setTextSize(1);
-  OLED.setCursor(0,10);
+  OLED.setCursor(0, 10);
   OLED.println("Check AP!");
 
-  OLED.display(); //output 'display buffer' to screen  
-  OLED.startscrollleft(0x00, 0x0F); //make display scroll 
+  OLED.display();                   //output 'display buffer' to screen
+  OLED.startscrollleft(0x00, 0x0F); //make display scroll
 #endif
-  
+
 #ifndef USE_TEST_DATA
   if (!wifiManager.autoConnect("AutoConnectAP", "password")) {
     Serial.println("failed to connect and hit timeout");
@@ -276,7 +277,7 @@ void setup() {
   //Add stuff into the 'display buffer'
   OLED.setTextColor(WHITE);
   OLED.setTextSize(1);
-  OLED.setCursor(0,10);
+  OLED.setCursor(0, 10);
   OLED.println("Connected!");
   UpdateDisplay();
 
@@ -291,7 +292,7 @@ void setup() {
   strcpy(mqtt_port, custom_mqtt_port.getValue());
   strcpy(mqtt_user, custom_mqtt_user.getValue());
   strcpy(mqtt_pass, custom_mqtt_pass.getValue());
-  strcpy(mqtt_msg,  custom_mqtt_msg.getValue());
+  strcpy(mqtt_msg, custom_mqtt_msg.getValue());
 
   Serial.println("MQTT setttings:");
   Serial.println(mqtt_server);
@@ -335,7 +336,6 @@ void setup() {
     ct[i].inputPinReader = adcPinReader;
     ct[i].current(sctPin[i], CORR_CURRENT);
   }
-
 
 #ifdef USE_MQTT
   Serial.println(F("Init OTA ..."));
@@ -381,21 +381,38 @@ void setup() {
   Serial.println(WiFi.localIP());
 #endif
 
-//  setSyncProvider( getNTPtime );
+  //  setSyncProvider( getNTPtime );
   timeClient.begin();
-  
+
 #ifdef USE_STATUS
   flipper.attach(STATUS_TIME, doSendStatus);
 #endif
 
 #ifdef USE_MQTT
-  const uint16_t mqtt_port_x = atoi(mqtt_port); 
+  const uint16_t mqtt_port_x = atoi(mqtt_port);
   client.setServer(mqtt_server, mqtt_port_x);
 //  client.setServer(mqtt_server, 1883);
 #endif
+
+  client.setCallback(callback);
+
+  client.publish(mqtt_msg, "init");
+  client.subscribe("powerMeter/disp");
 }
 
-void reconnect() {
+#define DISPLAY_TIME  10000
+int m_display = DISPLAY_TIME;
+
+void callback(char* topic, byte* payload, unsigned int length) {
+  //Message arrived [powerMeter/disp]
+  if( !strcmp(topic, "powerMeter/disp" ) ) {
+    Serial.print("Init display ...");
+    m_display = DISPLAY_TIME;
+  }
+}
+
+void reconnect()
+{
   // Loop until we're reconnected
   while (!client.connected()) {
 #ifdef RX_DEBUG
@@ -407,7 +424,8 @@ void reconnect() {
       Serial.println("Connected!");
 #endif
       // Once connected, publish an announcement...
-      client.publish(mqtt_msg, "ready");
+      client.publish(mqtt_msg, "connect");
+      client.subscribe("powerMeter/disp");
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
@@ -426,72 +444,85 @@ int pix = 0;
 
 void loop()
 {
-  static int  prevHour = 0;
+  static int prevHour = 0;
 
-  if( (tCnt % 100000) == 0 )
-    timeClient.update();
+  ArduinoOTA.handle();
 
-  if( (tCnt % 100) == 0 ) {
+//  if ((tCnt % 100) == 0)
+  {
 #ifdef USE_MQTT
     if (!client.connected())
       reconnect();
-
-    if (client.connected())
-      client.loop();
+//    if (client.connected())
+    client.loop();
 #endif
 
-    ArduinoOTA.handle();
   }
-  
+
 #ifdef USE_DISPLAY
-  if( (tCnt % 10) == 0 ) {
+  if (m_display && (tCnt % 10) == 0) {
 #ifdef DRAW_ROTATING_DISC
     // Draw moving line at bottom
-    OLED.writePixel(pix,63, WHITE);
+    OLED.writePixel(pix, 63, WHITE);
     pix++;
     pix = pix % SCREEN_WIDTH;
-    OLED.writePixel((pix+SCREEN_WIDTH-10)%SCREEN_WIDTH, 63, BLACK);
+    OLED.writePixel((pix + SCREEN_WIDTH - 10) % SCREEN_WIDTH, 63, BLACK);
     UpdateDisplay();
 #endif
+    m_display--;
+    if( m_display == 0 ) {
+       ClrDisplay();
+       UpdateDisplay();
+    }
   }
 #endif
 
-  if( (tCnt % 100) == 0 ) {
-  
-    if ( bBlink ) {
+  if ((tCnt % 1000) == 0) {
+    if ((tCnt % 100000) == 0)
+      timeClient.update();
+    // Get current time ...
+    local = getNTPtime();
+    if (hour(local) != prevHour) {
+      // New hour ...
+#define RESET_AT_MIDNIGHT
+#ifdef RESET_AT_MIDNIGHT
+      if (hour(local) == 0 && prevHour == 23)
+#endif // else every hour!
+      {
+        // Just passed midnight ... ;)
+        runAtMidnight();
+      }
+      prevHour = hour(local);
+    }
+  }
+
+  if ((tCnt % 100) == 0) {
+
+    if (bBlink) {
 #ifdef RX_DEBUG
       Serial.print("Blinks: ");
       Serial.println(blinkCnt);
 #endif
       bBlink = false;
     }
-  
+
 #ifdef USE_DISPLAY
-  #ifdef DRAW_ROTATING_DISC
-    OLED.fillRect(0, 0, Wm, SCREEN_HEIGHT-1, BLACK);
-  #else
-    OLED.fillRect(0, 0, Wm, SCREEN_HEIGHT, BLACK);
-  #endif
+    if( m_display ) {
+#ifdef DRAW_ROTATING_DISC
+      OLED.fillRect(0, 0, Wm, SCREEN_HEIGHT - 1, BLACK);
+#else
+      OLED.fillRect(0, 0, Wm, SCREEN_HEIGHT, BLACK);
 #endif
-  
-    // Get current time ...
-    local = getNTPtime();
-    if( hour(local) != prevHour ) {
-      // New hour ...
-      if( hour(local) == 0 && prevHour == 24 ) {
-        // Just passed midnight ... ;)
-        runAtMidnight();
-      }
-      prevHour = hour(local);
     }
-  
-  //  testADC();
+#endif
+
+    //  testADC();
     read3Phase();
-  
-    if( bSendStatus )
+
+    if (bSendStatus)
       sendStatus();
   }
-//  delay(delayTime);
+  //  delay(delayTime);
   tCnt++;
 }
 
@@ -504,10 +535,10 @@ void onPulse()
 
 void sendMsg(const char *topic, const char *m)
 {
-  #define MSG_LEN 50
+#define MSG_LEN 50
   char msg[MSG_LEN];
 
-  snprintf (msg, MSG_LEN, "%s/%s", mqtt_msg, topic);
+  snprintf(msg, MSG_LEN, "%s/%s", mqtt_msg, topic);
 #ifdef RX_DEBUG
   Serial.print("Publish message (");
   Serial.print(strlen(m));
@@ -530,7 +561,7 @@ void sendMsgF(const char *topic, double v)
 void sendMsgI(const char *topic, int v)
 {
   char buf[32];
-  snprintf (buf, 32, "%d", v);
+  snprintf(buf, 32, "%d", v);
   sendMsg(topic, buf);
 }
 
@@ -562,28 +593,37 @@ bool change(double a, double b, double diff)
 // Housekeeping ....
 unsigned long startMillis[NR_OF_PHASES];
 unsigned long endMillis[NR_OF_PHASES];
-double        oldIrms[NR_OF_PHASES] = { -99, -99, -99};
-int           oldPower[NR_OF_PHASES] = { -99, -99, -99};
+double oldIrms[NR_OF_PHASES] = {-99, -99, -99};
+int oldPower[NR_OF_PHASES] = {-99, -99, -99};
 
 // Current values ...
-double        irms[NR_OF_PHASES];
-unsigned long RMSPower[NR_OF_PHASES];       // Current power (W)
-double        peakCurrent[NR_OF_PHASES];    // Peak current (per day)
-unsigned long peakPower[NR_OF_PHASES];      // Peak power (per day)
-double        kilos[NR_OF_PHASES];          // Total kWh today (per phase)
-unsigned long todayPower;                   // Todays total
-unsigned long yesterdayPower;               // Yesterdays total
+double irms[NR_OF_PHASES];
+unsigned long RMSPower[NR_OF_PHASES];  // Current power (W)
+double peakCurrent[NR_OF_PHASES];      // Peak current (per day)
+unsigned long peakPower[NR_OF_PHASES]; // Peak power (per day)
+double kilos[NR_OF_PHASES];            // Total kWh today (per phase)
+double todayPower;              // Todays total
+double yesterdayPower;          // Yesterdays total
+
+unsigned long getTodayPower(void)
+{
+  return (unsigned long)todayPower;
+}
+unsigned long getYesterdayPower(void)
+{
+  return (unsigned long)yesterdayPower;
+}
 
 void runAtMidnight(void)
 {
-  todayPower = 0;
-  yesterdayPower = 0;
-  for ( int c = 0; c < NR_OF_PHASES; c++) {
-    yesterdayPower += (unsigned long)kilos[c];
+  yesterdayPower = todayPower;
+  todayPower = 0.0;
+  for (int c = 0; c < NR_OF_PHASES; c++) {
     kilos[c] = 0.0;
-    peakPower[c] = 0;
-    peakCurrent[c] = 0;
+    peakPower[c] = 0.0;
+    peakCurrent[c] = 0.0;
   }
+  doSendStatus();
 }
 
 void doSendStatus(void)
@@ -591,51 +631,62 @@ void doSendStatus(void)
   bSendStatus = true;
 }
 
+int _rcnt = 0;
+
+#define MY_CURRENT_FACTOR 2.5848
+
 void read3Phase(void)
 {
   uint8_t upd = 0;
   char topic[16];
-  double  wattNow = 0;
+  double wattNow = 0;
 #ifdef RX_DEBUG
   int n = 0;
   char buffer[128];
 #endif
-  int   iCurr;
-  
+  int iCurr;
+
   digitalWrite(LED_BUILTIN, LOW);
 
   // For each phase ...
-  for ( int c = 0; c < NR_OF_PHASES; c++) {
+  for (int c = 0; c < NR_OF_PHASES; c++) {
     // Read the current value of phase 'c'
 #ifdef USE_TEST_DATA
-    irms[c] = rand()%30;
+    irms[c] = rand() % 30;
 #else
-    irms[c] = ct[c].calcIrms(1480);
+    irms[c] = ct[c].calcIrms(1480) * MY_CURRENT_FACTOR;
 #endif
-    RMSPower[c] = 230*irms[c];
+
+    if( _rcnt < NR_OF_PHASES*5 ) { // Skip first readings to let sensor settle ...
+      _rcnt++;
+      continue;
+    }
+  
+    RMSPower[c] = 230 * irms[c];
 
 #ifdef USE_DISPLAY
     // Draw a bar with value on the display corresponding to the current
-    DrawBar(c, irms[c]);
+    if( m_display )
+      DrawBar(c, irms[c]);
 #endif
 
 #ifdef RX_DEBUG
     // Add current to log buffer ...
-    dtostrf(irms[c],1,2,buffer+n);
+    dtostrf(irms[c], 1, 2, buffer + n);
     n = strlen(buffer);
-    n += sprintf(buffer+n, "  ");
+    n += sprintf(buffer + n, "  ");
 #endif
 
     // If current has changed significantly, mark it for update!
-    if( change(irms[c], oldIrms[c], DELTA_AMP) ) {
-      upd |= 1<<c;
+    if (change(irms[c], oldIrms[c], DELTA_AMP)) {
+      upd |= 1 << c;
       oldIrms[c] = irms[c];
     }
 
     // A new peak-value ... ?
-    if( irms[c] > peakCurrent[c] )
+    if (irms[c] > peakCurrent[c])
       peakCurrent[c] = irms[c];
-    if( RMSPower[c] > peakPower[c] )
+    if (RMSPower[c] > peakPower[c])
       peakPower[c] = RMSPower[c];
 
     // Get time since last reading ...
@@ -644,32 +695,31 @@ void read3Phase(void)
     startMillis[c] = endMillis[c];
 
     // How much power has been used ... ?
-    double duration = ((double)dTime)/(60*60*1000.0); // Time in hours since last reading
-    wattNow = RMSPower[c] * duration; // So many Wh have been used ...
-    kilos[c] += wattNow/1000;
+    double duration = ((double)dTime) / (60 * 60 * 1000.0); // Time in hours since last reading
+    wattNow = RMSPower[c] * duration;                       // So many Wh have been used ...
+    kilos[c] += wattNow / 1000;
     todayPower += wattNow;
   }
 
 #ifdef USE_DISPLAY
   //Add stuff into the 'display buffer'
-  DrawPower(todayPower);
-  UpdateDisplay();
+  if( m_display ) {
+    DrawPower(todayPower);
+    UpdateDisplay();
+  }
 #endif
 
 #ifdef RX_DEBUG
-  Serial.println(buffer);
+//  Serial.println(buffer);
 #endif
 
-  if( upd ) { // Have updates to send ...
-/*    for ( int c = 0; c < NR_OF_PHASES; c++) {
-      if( upd & (1<<c) ) {
-        sprintf(topic, "phase_%d", c+1);
-        sendMsgF(topic, irms[c]);
-      }
-    }*/
-    char fBuf[64];
-    sprintf(fBuf, "{\"l1\":%.2f,\"l2\":%.2f,\"l3\":%.2f}", irms[0], irms[1], irms[2]);
-    sendMsg("current",fBuf);
+  if (upd) { // Have updates to send ...
+    char fBuf[128];
+    int _n = sprintf(fBuf, "{");
+    for(int i=0; i<3; i++)
+      _n += sprintf(fBuf+_n, "\"l%d\":%.2f,\"m%d\":%.2f,", i+1, irms[i], i+1, peakCurrent[i]);
+    sprintf(fBuf+_n-1, "}");
+    sendMsg("current", fBuf);
   }
 
   digitalWrite(LED_BUILTIN, HIGH);
