@@ -10,6 +10,8 @@
 #ifndef EmonLib_h
 #define EmonLib_h
 
+#define fangeBoardV1
+
 #if defined(ARDUINO) && ARDUINO >= 100
 
 #include "Arduino.h"

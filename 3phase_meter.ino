@@ -32,7 +32,7 @@
 //### LOCAL SETTINGS ##########################################
 #include "mySSID.h" // Include private SSID and password etc ...
 const char *otaHost = "PowerMeterOTA";
-const char *mqttClient = "PowerMeterTF";
+const char *mqttClient = "PowerMeter2TF";
 
 #define MESSAGE "powermeter2" // Default message
 #define RX_DEBUG              // Some additional printouts ...
@@ -633,8 +633,6 @@ void doSendStatus(void)
 
 int _rcnt = 0;
 
-#define MY_CURRENT_FACTOR 2.5848
-
 void read3Phase(void)
 {
   uint8_t upd = 0;
@@ -654,7 +652,7 @@ void read3Phase(void)
 #ifdef USE_TEST_DATA
     irms[c] = rand() % 30;
 #else
-    irms[c] = ct[c].calcIrms(1480) * MY_CURRENT_FACTOR;
+    irms[c] = ct[c].calcIrms(1480);
 #endif
 
     if( _rcnt < NR_OF_PHASES*5 ) { // Skip first readings to let sensor settle ...
@@ -700,6 +698,15 @@ void read3Phase(void)
     kilos[c] += wattNow / 1000;
     todayPower += wattNow;
   }
+
+#ifdef RX_DEBUG
+  Serial.print("IRMS: ");
+  for( int t=0; t<3; t++ ) {
+    Serial.print( irms[t]);
+    Serial.print(" ");
+  }
+  Serial.println();
+#endif
 
 #ifdef USE_DISPLAY
   //Add stuff into the 'display buffer'

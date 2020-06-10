@@ -195,7 +195,6 @@ double EnergyMonitor::calcIrms(unsigned int Number_of_Samples)
     int SupplyVoltage = readVcc();
   #endif
 
-
   for (unsigned int n = 0; n < Number_of_Samples; n++)
   {
     sampleI = (this->inputPinReader)(inPinI);
@@ -210,6 +209,7 @@ double EnergyMonitor::calcIrms(unsigned int Number_of_Samples)
     sqI = filteredI * filteredI;
     // 2) sum
     sumI += sqI;
+    delayMicroseconds(100);
   }
 
   double I_RATIO = ICAL *((SupplyVoltage/1000.0) / (ADC_COUNTS));
@@ -271,7 +271,11 @@ long EnergyMonitor::readVcc() {
   #elif defined(__arm__)
   return (3300);                                  //Arduino Due
   #else
+#ifdef fangeBoardV1
+  return (5000);                                  //Guess that other un-supported architectures will be running a 3.3V!
+#else
   return (3300);                                  //Guess that other un-supported architectures will be running a 3.3V!
+#endif
   #endif
 }
 
