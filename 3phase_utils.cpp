@@ -106,7 +106,7 @@ String Format(double val, int dec, int dig )
 }
 
 #define NR_OF_PHASES  3
-#define SENSOR_PAR_CNT (NR_OF_PHASES*4+2)
+#define SENSOR_PAR_CNT (NR_OF_PHASES*4+2+1)
 #define BUF_LEN 1024
 
 // Current values ...
@@ -115,6 +115,7 @@ extern unsigned long RMSPower[NR_OF_PHASES];      // Current power (W)
 extern double        peakCurrent[NR_OF_PHASES];   // Peak current (per day)
 extern unsigned long peakPower[NR_OF_PHASES];     // Peak power (per day)
 extern double        kilos[NR_OF_PHASES];         // Total kWh today (per phase)
+extern unsigned long getCurrentPower(void);       // Since last reading
 extern unsigned long getTodayPower(void);         // Todays total
 extern unsigned long getYesterdayPower(void);     // Yesterdays total
 extern time_t  getNTPtime(void);
@@ -154,6 +155,9 @@ void sendStatus(void)
     n = strlen(values);
   }
 
+  // Param 13
+  n += sprintf(values+n, ";%ld", getCurrentPower());
+
   // Let par point into the values string on the different values
   char *par[SENSOR_PAR_CNT];
   uint8_t cnt = 0;
@@ -169,6 +173,7 @@ void sendStatus(void)
   json = R"({
       "Time": $TIME,
       "ENERGY": {
+        "Now": $NOW,
         "Total": $TOTAL,
         "Yesterday":$YDAY,
         "Phase1": {
@@ -210,6 +215,7 @@ void sendStatus(void)
   json.replace("$POWER_3",    par[11]);
   json.replace("$TODAY_3",    par[12]);
   json.replace("$PEAK_3",     par[13]);
+  json.replace("$NOW",        par[14]);
 
 #ifdef RX_DEBUG
 //  Serial.println(timeClient.getFormattedTime());

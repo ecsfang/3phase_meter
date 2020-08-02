@@ -29,12 +29,27 @@
 // Library for current and power calculations
 #include "EmonLib.h"
 
+#define HOUSE
+//#define HEATER
+
+#ifdef HOUSE
+#define METER "House"
+#endif
+#ifdef HEATER
+#define METER "Heater"
+#endif
+
 //### LOCAL SETTINGS ##########################################
 #include "mySSID.h" // Include private SSID and password etc ...
-const char *otaHost = "PowerMeterOTA";
-const char *mqttClient = "PowerMeter2TF";
+const char *otaHost =    METER "MeterOTA";
+const char *mqttClient = METER "MeterTF";
 
-#define MESSAGE "powermeter2" // Default message
+#ifdef HOUSE
+#define MESSAGE "housePower" // Default message
+#endif
+#ifdef HEATER
+#define MESSAGE "heaterPower" // Default message
+#endif
 #define RX_DEBUG              // Some additional printouts ...
 //#define USE_BLINK_INTERRUPT       // Count blinks on the powermeter
 #define NR_OF_PHASES 3     // Number of phases to watch
@@ -603,12 +618,20 @@ double peakCurrent[NR_OF_PHASES];      // Peak current (per day)
 unsigned long peakPower[NR_OF_PHASES]; // Peak power (per day)
 double kilos[NR_OF_PHASES];            // Total kWh today (per phase)
 double todayPower;              // Todays total
+double currentPower;            // Current power in W
 double yesterdayPower;          // Yesterdays total
 
+unsigned long getCurrentPower(void)
+{
+  unsigned long p = currentPower;
+  currentPower = 0.0;
+  return p;
+}
 unsigned long getTodayPower(void)
 {
   return (unsigned long)todayPower;
 }
+
 unsigned long getYesterdayPower(void)
 {
   return (unsigned long)yesterdayPower;
@@ -644,7 +667,12 @@ void read3Phase(void)
 #endif
   int iCurr;
 
+  double  corr[3] = {
+    0.2, 0.5, 0.2
+  };
   digitalWrite(LED_BUILTIN, LOW);
+
+  currentPower = 0.0;
 
   // For each phase ...
   for (int c = 0; c < NR_OF_PHASES; c++) {
@@ -652,7 +680,9 @@ void read3Phase(void)
 #ifdef USE_TEST_DATA
     irms[c] = rand() % 30;
 #else
-    irms[c] = ct[c].calcIrms(1480);
+    irms[c] = ct[c].calcIrms(1480) - corr[c];
+    if( irms[c] < 0.0 )
+      irms[c] = 0.0;
 #endif
 
     if( _rcnt < NR_OF_PHASES*5 ) { // Skip first readings to let sensor settle ...
@@ -697,6 +727,7 @@ void read3Phase(void)
     wattNow = RMSPower[c] * duration;                       // So many Wh have been used ...
     kilos[c] += wattNow / 1000;
     todayPower += wattNow;
+    currentPower += wattNow;
   }
 
 #ifdef RX_DEBUG
@@ -725,7 +756,7 @@ void read3Phase(void)
     int _n = sprintf(fBuf, "{");
     for(int i=0; i<3; i++)
       _n += sprintf(fBuf+_n, "\"l%d\":%.2f,\"m%d\":%.2f,", i+1, irms[i], i+1, peakCurrent[i]);
-    sprintf(fBuf+_n-1, "}");
+    sprintf(fBuf+_n, "\"p\":%d}", getCurrentPower());
     sendMsg("current", fBuf);
   }
 
