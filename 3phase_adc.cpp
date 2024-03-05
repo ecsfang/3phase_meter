@@ -1,3 +1,4 @@
+#include "3phase_utils.h"
 #include "3phase_adc.h"
 
 #ifdef USE_ADS1015
@@ -8,6 +9,11 @@ void initAdc(void) {
   if( bHaveADS ) {
     Serial.println("Testing ADC connection...");
     Serial.println(adc.testConnection() ? "ADS1015 connection successful" : "ADS1015 connection failed");
+
+#ifdef USE_REMOTE_DBG
+    Debug.println("Testing ADC connection...");
+    Debug.println(adc.testConnection() ? "ADS1015 connection successful" : "ADS1015 connection failed");
+#endif
   
     adc.initialize(); // initialize ADS1015 12 bit A/D chip
     //continuous mode. Data will always be ready
@@ -99,6 +105,9 @@ MCP3008 mcp;
 
 void initAdc(void)
 {
+#ifdef USE_REMOTE_DBG
+    Debug.println("Init MCP3008 connection...");
+#endif
   mcp.begin();
 }
 
@@ -123,6 +132,11 @@ int adcPinReader(int addr)
 #else
     tmp = mcp.analogRead(addr);
 #endif
+
+#ifdef USE_REMOTE_DBG
+//  debugV("[%d] --> %d", addr, tmp);
+#endif
+
 
   // 333 ohm 0.5mA/A -> 30A = 15mA -> 5V -> tmp = +/- 5v
 

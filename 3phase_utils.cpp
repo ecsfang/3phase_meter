@@ -105,7 +105,7 @@ String Format(double val, int dec, int dig )
   return (fdata);
 }
 
-#define NR_OF_PHASES  3
+//#define NR_OF_PHASES  3
 #define SENSOR_PAR_CNT (NR_OF_PHASES*4+2+1)
 #define BUF_LEN 1024
 
@@ -115,7 +115,7 @@ extern unsigned long RMSPower[NR_OF_PHASES];      // Current power (W)
 extern double        peakCurrent[NR_OF_PHASES];   // Peak current (per day)
 extern unsigned long peakPower[NR_OF_PHASES];     // Peak power (per day)
 extern double        kilos[NR_OF_PHASES];         // Total kWh today (per phase)
-extern unsigned long getCurrentPower(void);       // Since last reading
+extern double        getCurrentPower(void);      // Since last reading
 extern unsigned long getTodayPower(void);         // Todays total
 extern unsigned long getYesterdayPower(void);     // Yesterdays total
 extern time_t  getNTPtime(void);
@@ -156,7 +156,7 @@ void sendStatus(void)
   }
 
   // Param 13
-  n += sprintf(values+n, ";%ld", getCurrentPower());
+  n += sprintf(values+n, ";%.1f", getCurrentPower());
 
   // Let par point into the values string on the different values
   char *par[SENSOR_PAR_CNT];
@@ -172,6 +172,7 @@ void sendStatus(void)
   String json;
   json = R"({
       "Time": $TIME,
+      "IP": $IP,
       "ENERGY": {
         "Now": $NOW,
         "Total": $TOTAL,
@@ -194,13 +195,26 @@ void sendStatus(void)
           "Power": $POWER_3,
           "Peak": $PEAK_3
         }
+#if NR_OF_PHASES == 4
+        ,
+        "Phase4": {
+          "Today": $TODAY_4,
+          "Current": $CURRENT_4,
+          "Power": $POWER_4,
+          "Peak": $PEAK_4
+        }
+#endif
       }
     })";
+
 
   local = getNTPtime(); //timeClient.getEpochTime(); //now();
   sprintf(dateBuf, "\"%d.%02d.%02d %02d:%02d:%02d\"", year(local), month(local), day(local), hour(local), minute(local), second(local));
 
+extern char *ip(void);
+
   json.replace("$TIME",       dateBuf);
+  json.replace("$IP",         ip());
   json.replace("$TOTAL",      par[0]);
   json.replace("$YDAY",       par[1]);
   json.replace("$CURRENT_1",  par[2]);
@@ -215,13 +229,25 @@ void sendStatus(void)
   json.replace("$POWER_3",    par[11]);
   json.replace("$TODAY_3",    par[12]);
   json.replace("$PEAK_3",     par[13]);
+#if NR_OF_PHASES == 4
+  json.replace("$CURRENT_4",  par[14]);
+  json.replace("$POWER_4",    par[15]);
+  json.replace("$TODAY_4",    par[16]);
+  json.replace("$PEAK_4",     par[17]);
+  json.replace("$NOW",        par[18]);
+#else
   json.replace("$NOW",        par[14]);
+#endif
 
 #ifdef RX_DEBUG
 //  Serial.println(timeClient.getFormattedTime());
 //  Serial.println( json );
 #endif
 //  Serial.println(timeClient.getFormattedTime());
+#ifdef USE_REMOTE_DBG
+    Debug.print("json: ");
+    Debug.println(json.c_str());
+#endif
   sendMsg("status", json.c_str());
   bSendStatus = false;
 }
