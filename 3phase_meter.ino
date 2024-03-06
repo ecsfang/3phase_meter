@@ -5,6 +5,24 @@
   Card:       Lolin (Wemos) D1 R2 & mini
   Flash Size: 4M (1M Spiffs)
 
+  Libraries:
+    ADAFruit_SSD1306  2.5.9
+    NTPClient         3.2.1
+    Timezone          1.2.4
+    MCP3XXX           1.0.0
+    WiFiManager       2.0.17
+    PubSubClient      2.8.0
+    EmonLib           Use updated lib in repositoryt
+    ArduinoJson       6.21.2
+    RemoteDebug       3.0.5
+
+  Board:
+    ESP8266           2.5.1
+
+ TimeZone warning:
+    open the library.properties file with a text editor
+    change the architecture=avr line to "architecture=avr,esp8266, esp32" (I also added ESP32 since I am using one for my current project)
+    save and close the file
  ***************************************************************************/
 #include <FS.h> //this needs to be first, or it all crashes and burns...
 
@@ -92,7 +110,8 @@ EnergyMonitor ct[NR_OF_PHASES];
 // The pins connected to the sensors
 #if NR_OF_PHASES == 3
 int sctPin[NR_OF_PHASES] = {ADC_CH0, ADC_CH1, ADC_CH2};
-#else
+#endif
+#if NR_OF_PHASES == 4
 int sctPin[NR_OF_PHASES] = {ADC_CH0, ADC_CH1, ADC_CH2, ADC_CH3};
 #endif
 
