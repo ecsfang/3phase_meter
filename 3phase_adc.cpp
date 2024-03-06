@@ -106,12 +106,10 @@ MCP3008 mcp;
 void initAdc(void)
 {
 #ifdef USE_REMOTE_DBG
-    Debug.println("Init MCP3008 connection...");
+  Debug.println("Init MCP3008 connection...");
 #endif
   mcp.begin();
 }
-
-bool bNeg[3];
 
 //#define USE_DIFFERENTIAL
 
@@ -121,6 +119,7 @@ int adcPinReader(int addr)
   int32_t tmp;
 
 #ifdef USE_DIFFERENTIAL
+  bool bNeg[3];
   int chan = addr*2;
 
   if( bNeg[addr] )
@@ -137,34 +136,27 @@ int adcPinReader(int addr)
 //  debugV("[%d] --> %d", addr, tmp);
 #endif
 
-
   // 333 ohm 0.5mA/A -> 30A = 15mA -> 5V -> tmp = +/- 5v
 
   //calculation:
   // tmp * ADS1115_MV_6P144 returns a voltage measurement between 0 and 5v
   // emonlib expect a value between 0 an 1024, so convert
   // TODO: we're loosing precision here as it's converted to a 10 bit value. fix this.
-//  return (tmp*adc.getMvPerCount()*1024)/3300; // 0-1024 (where 1024 = 3.3V)
-  return tmp;
+  //  return (tmp*adc.getMvPerCount()*1024)/3300; // 0-1024 (where 1024 = 3.3V)
   //return (tmp*1110/2000)*264/100;
+
+  return tmp;
 }
 
 void testADC(void)
 {
-  for (size_t i = 0; i < mcp.numChannels(); ++i)
-  {
+  for (size_t i = 0; i < mcp.numChannels(); ++i) {
     Serial.print(mcp.analogRead(i));
-    
     if (i == mcp.numChannels() - 1)
-    {
       Serial.println();
-    }
     else
-    {
       Serial.print(",");
-    }
   }
-
   delay(10);
 }
 

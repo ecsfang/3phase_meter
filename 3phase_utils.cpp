@@ -1,7 +1,7 @@
 
-// For the 0.96" OLED display
 #include "3phase_utils.h"
 
+// For the 0.96" OLED display
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
 #define OLED_RESET     0 // Reset pin # (or -1 if sharing Arduino reset pin)
 Adafruit_SSD1306 OLED(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
@@ -90,10 +90,16 @@ void DrawPower(double p)
   OLED.setRotation(0);
 }
 
+// Format a string right justified
+// p = 3.14
+// Format(p, 5, 1) --> "  3.1"
 String Format(double val, int dec, int dig )
 {
   // this is my simple way of formatting a number
   // data = Format(number, digits, decimals) when needed
+  // val - value to be printed
+  // dec - number of total characters in string
+  // dig - number of decimal digits
 
   int addpad = 0;
   char sbuf[20];
@@ -105,26 +111,8 @@ String Format(double val, int dec, int dig )
   return (fdata);
 }
 
-//#define NR_OF_PHASES  3
 #define SENSOR_PAR_CNT (NR_OF_PHASES*4+2+1)
 #define BUF_LEN 1024
-
-// Current values ...
-extern double        irms[NR_OF_PHASES];
-extern unsigned long RMSPower[NR_OF_PHASES];      // Current power (W)
-extern double        peakCurrent[NR_OF_PHASES];   // Peak current (per day)
-extern unsigned long peakPower[NR_OF_PHASES];     // Peak power (per day)
-extern double        kilos[NR_OF_PHASES];         // Total kWh today (per phase)
-extern double        getCurrentPower(void);      // Since last reading
-extern unsigned long getTodayPower(void);         // Todays total
-extern unsigned long getYesterdayPower(void);     // Yesterdays total
-extern time_t  getNTPtime(void);
-
-extern void sendMsg(const char *topic, const char *m);
-extern void sendMsgF(const char *topic, double v);
-extern void sendMsgI(const char *topic, int v);
-
-extern bool  bSendStatus;
 
 void sendStatus(void)
 {
@@ -171,83 +159,84 @@ void sendStatus(void)
   // Fill in report
   String json;
   json = R"({
-      "Time": $TIME,
-      "IP": $IP,
-      "ENERGY": {
-        "Now": $NOW,
-        "Total": $TOTAL,
-        "Yesterday":$YDAY,
-        "Phase1": {
-          "Today": $TODAY_1,
-          "Current": $CURRENT_1,
-          "Power": $POWER_1,
-          "Peak": $PEAK_1
-        },
-        "Phase2": {
-          "Today": $TODAY_2,
-          "Current": $CURRENT_2,
-          "Power": $POWER_2,
-          "Peak": $PEAK_2
-        },
-        "Phase3": {
-          "Today": $TODAY_3,
-          "Current": $CURRENT_3,
-          "Power": $POWER_3,
-          "Peak": $PEAK_3
-        }
-#if NR_OF_PHASES == 4
-        ,
-        "Phase4": {
-          "Today": $TODAY_4,
-          "Current": $CURRENT_4,
-          "Power": $POWER_4,
-          "Peak": $PEAK_4
-        }
-#endif
+    "Time": $TIME,
+    "IP": $IP,
+    "ENERGY": {
+      "Now": $NOW,
+      "Total": $TOTAL,
+      "Yesterday":$YDAY,
+      "Phase1": {
+        "Today": $TODAY_1,
+        "Current": $CURRENT_1,
+        "Power": $POWER_1,
+        "Peak": $PEAK_1
+      },
+      "Phase2": {
+        "Today": $TODAY_2,
+        "Current": $CURRENT_2,
+        "Power": $POWER_2,
+        "Peak": $PEAK_2
+      },
+      "Phase3": {
+        "Today": $TODAY_3,
+        "Current": $CURRENT_3,
+        "Power": $POWER_3,
+        "Peak": $PEAK_3
       }
-    })";
+#if NR_OF_PHASES == 4
+      ,
+      "Phase4": {
+        "Today": $TODAY_4,
+        "Current": $CURRENT_4,
+        "Power": $POWER_4,
+        "Peak": $PEAK_4
+      }
+#endif
+    }
+  })";
 
-
-  local = getNTPtime(); //timeClient.getEpochTime(); //now();
-  sprintf(dateBuf, "\"%d.%02d.%02d %02d:%02d:%02d\"", year(local), month(local), day(local), hour(local), minute(local), second(local));
-
-extern char *ip(void);
-
+  // Get current time
+  local = getNTPtime();
+  // Format the date and time
+  sprintf(dateBuf, "\"%d.%02d.%02d %02d:%02d:%02d\"",
+        year(local), month(local), day(local),
+        hour(local), minute(local), second(local));
+  
+  n = 0;
   json.replace("$TIME",       dateBuf);
   json.replace("$IP",         ip());
-  json.replace("$TOTAL",      par[0]);
-  json.replace("$YDAY",       par[1]);
-  json.replace("$CURRENT_1",  par[2]);
-  json.replace("$POWER_1",    par[3]);
-  json.replace("$TODAY_1",    par[4]);
-  json.replace("$PEAK_1",     par[5]);
-  json.replace("$CURRENT_2",  par[6]);
-  json.replace("$POWER_2",    par[7]);
-  json.replace("$TODAY_2",    par[8]);
-  json.replace("$PEAK_2",     par[9]);
-  json.replace("$CURRENT_3",  par[10]);
-  json.replace("$POWER_3",    par[11]);
-  json.replace("$TODAY_3",    par[12]);
-  json.replace("$PEAK_3",     par[13]);
+  json.replace("$TOTAL",      par[n++]);
+  json.replace("$YDAY",       par[n++]);
+
+  json.replace("$CURRENT_1",  par[n++]);
+  json.replace("$POWER_1",    par[n++]);
+  json.replace("$TODAY_1",    par[n++]);
+  json.replace("$PEAK_1",     par[n++]);
+
+  json.replace("$CURRENT_2",  par[n++]);
+  json.replace("$POWER_2",    par[n++]);
+  json.replace("$TODAY_2",    par[n++]);
+  json.replace("$PEAK_2",     par[n++]);
+
+  json.replace("$CURRENT_3",  par[n++]);
+  json.replace("$POWER_3",    par[n++]);
+  json.replace("$TODAY_3",    par[n++]);
+  json.replace("$PEAK_3",     par[n++]);
+
 #if NR_OF_PHASES == 4
-  json.replace("$CURRENT_4",  par[14]);
-  json.replace("$POWER_4",    par[15]);
-  json.replace("$TODAY_4",    par[16]);
-  json.replace("$PEAK_4",     par[17]);
-  json.replace("$NOW",        par[18]);
-#else
-  json.replace("$NOW",        par[14]);
+  json.replace("$CURRENT_4",  par[n++]);
+  json.replace("$POWER_4",    par[n++]);
+  json.replace("$TODAY_4",    par[n++]);
+  json.replace("$PEAK_4",     par[n++]);
 #endif
 
-#ifdef RX_DEBUG
-//  Serial.println(timeClient.getFormattedTime());
-//  Serial.println( json );
-#endif
-//  Serial.println(timeClient.getFormattedTime());
+  json.replace("$NOW",        par[n++]);
+
 #ifdef USE_REMOTE_DBG
-    Debug.print("json: ");
-    Debug.println(json.c_str());
+  Debug.print("json: ");
+  Debug.println(json.c_str());
 #endif
+
   sendMsg("status", json.c_str());
   bSendStatus = false;
 }

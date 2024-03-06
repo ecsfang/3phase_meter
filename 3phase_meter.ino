@@ -21,7 +21,7 @@
 
  TimeZone warning:
     open the library.properties file with a text editor
-    change the architecture=avr line to "architecture=avr,esp8266, esp32" (I also added ESP32 since I am using one for my current project)
+    change the architectures=avr line to "architectures=avr,esp8266, esp32" (or "architectures=*")
     save and close the file
  ***************************************************************************/
 #include <FS.h> //this needs to be first, or it all crashes and burns...
@@ -131,7 +131,6 @@ TimeChangeRule CET = {"", Last, Sun, Oct, 3, 60};
 Timezone CE(CEST, CET);
 TimeChangeRule *tcr;
 
-WiFiUDP ntpUDP;
 
 Ticker flipper;
 bool bSendStatus = false;
@@ -148,8 +147,9 @@ Ticker lwdTicker;
 unsigned long lwdTime = 0;
 unsigned long lwdTimeout = LWD_TIMEOUT;
 
-// By default 'pool.ntp.org' is used with 60 seconds update interval and
-// no offset
+// Define an NTP client to get date and time.
+WiFiUDP ntpUDP;
+// By default 'pool.ntp.org' is used with 60 seconds update interval and no offset
 NTPClient timeClient(ntpUDP);
 
 uint32_t seconds(void) { return millis() / 1000; }
@@ -462,7 +462,7 @@ void setup()
   Serial.println(WiFi.macAddress());
 #endif
 
-  //  setSyncProvider( getNTPtime );
+  // Initialize the NTPClient
   timeClient.begin();
 
 #ifdef USE_STATUS
@@ -630,12 +630,14 @@ void loop()
   }
 #endif
 
+  // Every now and then ...
   if ((tCnt % 1000) == 0) {
 #ifdef USE_REMOTE_DBG
     Debug.println("Check time ...");
 #endif
-  if ((tCnt % 100000) == 0)
+    if ((tCnt % 100000) == 0)
       timeClient.update();
+
     // Get current time ...
     local = getNTPtime();
     if (hour(local) != prevHour) {

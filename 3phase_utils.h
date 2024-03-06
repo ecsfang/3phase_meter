@@ -82,3 +82,22 @@ void DrawPower(double p);
 void DrawBar(int r, float val);
 float scale(float f);
 String Format(double val, int dec, int dig );
+
+// Current values ...
+extern double         irms[NR_OF_PHASES];
+extern unsigned long  RMSPower[NR_OF_PHASES];     // Current power (W)
+extern double         peakCurrent[NR_OF_PHASES];  // Peak current (per day)
+extern unsigned long  peakPower[NR_OF_PHASES];    // Peak power (per day)
+extern double         kilos[NR_OF_PHASES];        // Total kWh today (per phase)
+extern double         getCurrentPower(void);      // Since last reading
+extern unsigned long  getTodayPower(void);        // Todays total
+extern unsigned long  getYesterdayPower(void);    // Yesterdays total
+extern time_t         getNTPtime(void);
+
+extern char *ip(void);
+
+extern void sendMsg(const char *topic, const char *m);
+extern void sendMsgF(const char *topic, double v);
+extern void sendMsgI(const char *topic, int v);
+
+extern bool  bSendStatus;
