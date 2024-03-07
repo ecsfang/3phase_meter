@@ -63,7 +63,7 @@
 const char *otaHost =    METER "MeterOTA";
 const char *mqttClient = METER "MeterTF";
 
-#define RX_DEBUG              // Some additional printouts ...
+//#define RX_DEBUG              // Some additional printouts ...
 //#define USE_BLINK_INTERRUPT       // Count blinks on the powermeter
 #define USE_STATUS          // Define to send status message every X minute
 #ifdef RX_DEBUG
@@ -74,6 +74,10 @@ const char *mqttClient = METER "MeterTF";
 #define USE_MQTT           // Remove if running in e.g. a test environment ...
 //#define FIRST_FLASH
 //#define USE_TEST_DATA
+#define RESET_AT_MIDNIGHT
+#define MSG_LEN 1024
+#define LWD_TIMEOUT  15*1000  // Reboot if loop watchdog timer reaches this time out value
+#define DISPLAY_TIME  10000   // How long the display should be active after boot
 //#############################################################
 
 #ifdef USE_BLINK_INTERRUPT
@@ -121,8 +125,21 @@ PubSubClient client(espClient);
 RemoteDebug Debug;
 #endif
 
-// Check current with 1Hz ...
-unsigned long delayTime = 1000;
+// Housekeeping ....
+unsigned long startMillis[NR_OF_PHASES];
+unsigned long endMillis[NR_OF_PHASES];
+double oldIrms[4] = {-99, -99, -99, -99};
+int oldPower[4] = {-99, -99, -99, -99};
+
+// Current values ...
+double irms[NR_OF_PHASES];
+unsigned long RMSPower[NR_OF_PHASES];  // Current power (W)
+double peakCurrent[NR_OF_PHASES];      // Peak current (per day)
+unsigned long peakPower[NR_OF_PHASES]; // Peak power (per day)
+double kilos[NR_OF_PHASES];            // Total kWh today (per phase)
+double todayPower;              // Todays total
+double currentPower;           // Current energy in kWh
+double yesterdayPower;          // Yesterdays total
 
 // Set up summer/winter-time rules
 TimeChangeRule CEST = {"", Last, Sun, Mar, 2, 120};
@@ -141,8 +158,6 @@ extern Adafruit_SSD1306 OLED;
 #endif
 
 Ticker lwdTicker;
- 
-#define LWD_TIMEOUT  15*1000  // Reboot if loop watchdog timer reaches this time out value
 
 unsigned long lwdTime = 0;
 unsigned long lwdTimeout = LWD_TIMEOUT;
@@ -193,9 +208,7 @@ void setup()
 
   Serial.begin(115200);
 
-#ifdef USE_DISPLAY
   oled_setup();
-#endif
 
   delay(1000);
   Serial.println(F("PowerMeter!"));
@@ -208,15 +221,10 @@ void setup()
 #endif
 
 #ifdef USE_DISPLAY
-  OLED.clearDisplay();
+  ClrDisplay();
   //Add stuff into the 'display buffer'
-  OLED.setTextColor(WHITE);
-  OLED.setTextSize(1);
-  OLED.setCursor(0, 10);
-  OLED.println("Booting");
-
-  OLED.display();                   //output 'display buffer' to screen
-  OLED.startscrollleft(0x00, 0x0F); //make display scroll
+  DispText(0, 10, "Booting");
+  UpdateDisplay(true)
 #endif
 
   Serial.println(F("Blink LEDs ..."));
@@ -325,15 +333,10 @@ void setup()
   //and goes into a blocking loop awaiting configuration
 
 #ifdef USE_DISPLAY
-  OLED.clearDisplay();
+  ClrDisplay();
   //Add stuff into the 'display buffer'
-  OLED.setTextColor(WHITE);
-  OLED.setTextSize(1);
-  OLED.setCursor(0, 10);
-  OLED.print("Check " METER "_AP");
-
-  OLED.display();                   //output 'display buffer' to screen
-  OLED.startscrollleft(0x00, 0x0F); //make display scroll
+  DispText(0, 10, "Check " METER "_AP");
+  UpdateDisplay(true);
 #endif
 
 #ifndef USE_TEST_DATA
@@ -347,16 +350,11 @@ void setup()
 #endif
 
 #ifdef USE_DISPLAY
-  OLED.clearDisplay();
-  OLED.stopscroll();
+  ClrDisplay();
   //Add stuff into the 'display buffer'
-  OLED.setTextColor(WHITE);
-  OLED.setTextSize(1);
-  OLED.setCursor(0, 10);
-  OLED.println("Connected!");
-  OLED.setCursor(0, 20);
-  OLED.println(WiFi.localIP());
-  UpdateDisplay();
+  DispText(0, 10, "Connected!");
+  DIspText(0, 20, WiFi.localIP());
+  UpdateDisplay(false);
   delay(2000);
   ClrDisplay();
 #endif
@@ -507,7 +505,6 @@ char *ip(void)
   return ipb;
 }
 
-#define DISPLAY_TIME  10000
 int m_display = DISPLAY_TIME;
 
 void callback(char* topic, byte* payload, unsigned int length) {
@@ -516,21 +513,19 @@ void callback(char* topic, byte* payload, unsigned int length) {
     Serial.print("Init display ...");
     m_display = DISPLAY_TIME;
   }
+  if( !strcmp(topic, "powerMeter/reset" ) ) {
+    Serial.print("Reset device ...");
+    delay(500);
+    ESP.restart();
+  }
+  if( !strcmp(topic, "powerMeter/clear" ) ) {
+    Serial.print("Clear device ...");
+    todayPower = 0;
+    runAtMidnight();
+    m_display = DISPLAY_TIME;
+    ClrDisplay();
+  }
 }
-
-#ifdef USE_DISPLAY
-void dispError(char *error)
-{
-  OLED.clearDisplay();
-  //Add stuff into the 'display buffer'
-  OLED.setTextColor(WHITE);
-  OLED.setTextSize(1);
-  OLED.setCursor(0, 10);
-  OLED.print(error);
-  OLED.display();                   //output 'display buffer' to screen
-  OLED.startscrollleft(0x00, 0x0F); //make display scroll
-}
-#endif
 
 void reconnect()
 {
@@ -551,15 +546,13 @@ void reconnect()
       // Once connected, publish an announcement...
       client.publish(mqtt_msg, "connect");
       client.subscribe("powerMeter/disp");
-#ifdef USE_DISPLAY
-      OLED.clearDisplay();
-#endif
+      ClrDisplay();
 } else {
 #ifdef USE_DISPLAY
       if( nLoop == 1 ) {
         char err[16];
         sprintf(err, "Err: %d", client.state());
-        dispError(err);
+        DispError(err);
       }
 #endif
       Serial.print("failed, rc=");
@@ -574,9 +567,7 @@ void reconnect()
       }
     }
   }
-#ifdef USE_DISPLAY
   ClrDisplay();
-#endif
 #ifdef USE_REMOTE_DBG
   Debug.printf("Connected!\n");
 #endif
@@ -620,12 +611,12 @@ void loop()
     pix++;
     pix = pix % SCREEN_WIDTH;
     OLED.writePixel((pix + SCREEN_WIDTH - 10) % SCREEN_WIDTH, 63, BLACK);
-    UpdateDisplay();
+    UpdateDisplay(false);
 #endif
     m_display--;
     if( m_display == 0 ) {
        ClrDisplay();
-       UpdateDisplay();
+       UpdateDisplay(false);
     }
   }
 #endif
@@ -642,7 +633,6 @@ void loop()
     local = getNTPtime();
     if (hour(local) != prevHour) {
       // New hour ...
-#define RESET_AT_MIDNIGHT
 #ifdef RESET_AT_MIDNIGHT
       if (hour(local) == 0 && prevHour == 23)
 #endif // else every hour!
@@ -684,7 +674,6 @@ void loop()
       sendStatus();
     }
   }
-  //  delay(delayTime);
   tCnt++;
 }
 
@@ -697,7 +686,6 @@ void onPulse()
 
 void sendMsg(const char *topic, const char *m)
 {
-#define MSG_LEN 1024
   char msg[MSG_LEN];
 
   snprintf(msg, MSG_LEN, "%s/%s", mqtt_msg, topic);
@@ -752,21 +740,6 @@ bool change(double a, double b, double diff)
   return (a > b ? (a - b) : (b - a)) > diff;
 }
 
-// Housekeeping ....
-unsigned long startMillis[NR_OF_PHASES];
-unsigned long endMillis[NR_OF_PHASES];
-double oldIrms[4] = {-99, -99, -99, -99};
-int oldPower[4] = {-99, -99, -99, -99};
-
-// Current values ...
-double irms[NR_OF_PHASES];
-unsigned long RMSPower[NR_OF_PHASES];  // Current power (W)
-double peakCurrent[NR_OF_PHASES];      // Peak current (per day)
-unsigned long peakPower[NR_OF_PHASES]; // Peak power (per day)
-double kilos[NR_OF_PHASES];            // Total kWh today (per phase)
-double todayPower;              // Todays total
-double currentPower;           // Current energy in kWh
-double yesterdayPower;          // Yesterdays total
 
 double getCurrentPower(void)
 {
@@ -848,7 +821,9 @@ if( irms[c] < 0.0 )
 
     if( _rcnt < NR_OF_PHASES*5 ) { // Skip first readings to let sensor settle ...
       _rcnt++;
+#ifdef RX_DEBUG
       n += sprintf(buffer + n, "<skipped>");
+#endif
       continue;
     }
   
@@ -909,7 +884,7 @@ if( irms[c] < 0.0 )
   //Add stuff into the 'display buffer'
   if( m_display ) {
     DrawPower(todayPower);
-    UpdateDisplay();
+    UpdateDisplay(false);
   }
 #endif
 

@@ -75,11 +75,14 @@ void sendStatus(void);
 
 void oled_setup(void);
 void ClrDisplay(void);
-void UpdateDisplay(void);
+void UpdateDisplay(bool);
 void DrawPhase(double f, int i);
 // Draw number at end of display
 void DrawPower(double p);
 void DrawBar(int r, float val);
+void DispError(char *error);
+void DispText(int x, int y, char *txt);
+
 float scale(float f);
 String Format(double val, int dec, int dig );
 

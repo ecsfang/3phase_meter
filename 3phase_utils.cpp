@@ -7,19 +7,18 @@
 Adafruit_SSD1306 OLED(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 void oled_setup()   {
+#ifdef USE_DISPLAY
   OLED.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS);
   OLED.setRotation(1);
-  OLED.clearDisplay();
+  ClrDisplay();
 
   //Add stuff into the 'display buffer'
-  OLED.setTextColor(WHITE);
   OLED.setTextSize(2);
-  OLED.setCursor(0,0);
   OLED.println("Power\nMeter");
-  OLED.startscrollleft(0x00, 0x0F); //make display scroll 
-  OLED.display(); //output 'display buffer' to screen  
+  UpdateDisplay(true); //output 'display buffer' to screen  
   ClrDisplay();
   OLED.setRotation(0);
+#endif
 }
 
 float scale(float f)
@@ -32,15 +31,22 @@ int del[3];             // Delay to remove max indicator
 
 void ClrDisplay(void)
 {
+#ifdef USE_DISPLAY
   OLED.clearDisplay();
   OLED.setTextColor(WHITE);
-  OLED.setTextSize(0);
+  OLED.setTextSize(1);
   OLED.setCursor(0,0);
+#endif
 }
 
-void UpdateDisplay(void)
+
+void UpdateDisplay(bool bScroll)
 {
-  OLED.display(); //output 'display buffer' to screen  
+  if( !bScroll )
+    OLED.stopscroll();
+  OLED.display(); //output 'display buffer' to screen
+  if( bScroll )
+    OLED.startscrollleft(0x00, 0x0F); //make display scroll
 }
 
 void DrawBar(int r, float val)
@@ -89,6 +95,26 @@ void DrawPower(double p)
   OLED.print(Format(p, 5, 0));
   OLED.setRotation(0);
 }
+
+void DispText(int x, int y, char *txt)
+{
+#ifdef USE_DISPLAY
+  OLED.setCursor(x, y);
+  OLED.print(txt);
+#endif
+}
+
+#ifdef USE_DISPLAY
+void DispError(char *error)
+{
+  ClrDisplay();
+  OLED.clearDisplay();
+  //Add stuff into the 'display buffer'
+  OLED.setCursor(0, 10);
+  OLED.print(error);
+  ClrDisplay(true);
+}
+#endif
 
 // Format a string right justified
 // p = 3.14
@@ -157,6 +183,7 @@ void sendStatus(void)
   }
   
   // Fill in report
+#if NR_OF_PHASES == 3
   String json;
   json = R"({
     "Time": $TIME,
@@ -183,17 +210,45 @@ void sendStatus(void)
         "Power": $POWER_3,
         "Peak": $PEAK_3
       }
+    }
+  })";
+#endif
 #if NR_OF_PHASES == 4
-      ,
+  String json;
+  json = R"({
+    "Time": $TIME,
+    "IP": $IP,
+    "ENERGY": {
+      "Now": $NOW,
+      "Total": $TOTAL,
+      "Yesterday":$YDAY,
+      "Phase1": {
+        "Today": $TODAY_1,
+        "Current": $CURRENT_1,
+        "Power": $POWER_1,
+        "Peak": $PEAK_1
+      },
+      "Phase2": {
+        "Today": $TODAY_2,
+        "Current": $CURRENT_2,
+        "Power": $POWER_2,
+        "Peak": $PEAK_2
+      },
+      "Phase3": {
+        "Today": $TODAY_3,
+        "Current": $CURRENT_3,
+        "Power": $POWER_3,
+        "Peak": $PEAK_3
+      },
       "Phase4": {
         "Today": $TODAY_4,
         "Current": $CURRENT_4,
         "Power": $POWER_4,
         "Peak": $PEAK_4
       }
-#endif
     }
   })";
+#endif
 
   // Get current time
   local = getNTPtime();
