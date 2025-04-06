@@ -9,10 +9,10 @@
 #include <coredecls.h>            // settimeofday_cb()
 #include <Timezone.h>             // https://github.com/JChristensen/Timezone
 
-//#define HOUSE
-//#define HEATER
-#define SPA
-//#define KITCHEN
+//#define HOUSE     // Meter outside on the incoming power
+//#define HEATER    // Meter on the heater
+#define SPA       // Meter outside for the SPA
+//#define KITCHEN   // Meter on the fuse box for the kitchen (oven etc)
 
 #define USE_REMOTE_DBG
 
@@ -39,6 +39,7 @@
 #define SCT_013_000        // The sensor used
 #define USE_CORRECTION
 #define USE_DISPLAY
+#define DISP_MSG "Heater"
 #define NR_OF_PHASES 3      // Number of phases to watch
 #endif
 #ifdef KITCHEN
@@ -49,6 +50,8 @@
 #endif
 #ifdef SPA
 #define MESSAGE "spaPower"    // Default message
+#define USE_DISPLAY
+#define DISP_MSG "SPA"
 #define SCT_013_000        // The sensor used
 #define NR_OF_PHASES 3      // Number of phases to watch
 #endif

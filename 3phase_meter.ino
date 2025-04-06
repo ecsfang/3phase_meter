@@ -48,6 +48,9 @@
 #include <ArduinoOTA.h>
 #include <PubSubClient.h>
 
+//#include "config.h"
+//configData *cfgdat;
+
 #ifdef USE_REMOTE_DBG
 #include "RemoteDebug.h"  //https://github.com/JoaoLopesF/RemoteDebug
 #endif
@@ -243,71 +246,39 @@ void setup()
   SPIFFS.format();
 #endif
 
-  //read configuration from FS json
-  Serial.println("Mounting FS...");
+#if 0
+    // instantiate the `configData` object, during construction
+    // it will read the configuration file and make its data 
+    // availble.
+    cfgdat = new configData();
 
-  if(!SPIFFS.begin()) {
-    Serial.println("failed to mount FS");
-    Serial.println("Format FS...");
-    SPIFFS.format();
-    strcpy(mqtt_server, _mqtt_server);
-    strcpy(mqtt_user, _mqtt_user);
-    strcpy(mqtt_pass, _mqtt_pass);
-  } else {
-    Serial.println("mounted file system");
-    if (SPIFFS.exists("/config.json")) {
-      //file exists, reading and loading
-      Serial.println("reading config file");
-      File configFile = SPIFFS.open("/config.json", "r");
-      if (configFile) {
-        Serial.println("opened config file");
-        size_t size = configFile.size();
-        // Allocate a buffer to store contents of the file.
-        std::unique_ptr<char[]> buf(new char[size]);
+    // let's check for errors before continuing...
+    String errMsg;
+    if(!cfgdat->getError(errMsg)) {
+        // no errors!
+        
+        Serial.println("Mounting FS...");
+        // set up the logger, typically sent out via Serial
+        // but can be modified as needed.
 
-        configFile.readBytes(buf.get(), size);
-        DynamicJsonDocument doc(256);
-        DeserializationError error = deserializeJson(doc, buf.get());
-        if (error) {
-        }
-        JsonObject json = doc.as<JsonObject>();
-        serializeJson(json, Serial);
-        if (!json.isNull()) {
-          Serial.println("\nparsed json");
-          strcpy(mqtt_server, json["mqtt_server"]);
-          strcpy(mqtt_port, json["mqtt_port"]);
-          strcpy(mqtt_user, json["mqtt_user"]);
-          strcpy(mqtt_pass, json["mqtt_pass"]);
-          strcpy(mqtt_msg, json["mqtt_msg"]);
-        } else {
-          Serial.println("failed to load json config");
-        }
-      }
+        WiFi.mode(WIFI_STA);
+        // Use the functions that return `const char *` because
+        // WiFi.begin() doesn't take String as an arg.
+        WiFi.begin(cfgdat->getSSID(), cfgdat->getPASS());
+    } else {
+        // an error has occurred, the message will provide
+        // additional information.
+        Serial.println(errMsg);
     }
-  }
-  //end read
-
-  // The extra parameters to be configured (can be either global or just in the setup)
-  // After connecting, parameter.getValue() will get you the configured value
-  // id/name placeholder/prompt default length
-  WiFiManagerParameter custom_mqtt_server("server", "mqtt server", mqtt_server, 40);
-  WiFiManagerParameter custom_mqtt_port("port", "mqtt port", mqtt_port, 6);
-  WiFiManagerParameter custom_mqtt_user("user", "mqtt user", mqtt_user, 20);
-  WiFiManagerParameter custom_mqtt_pass("pass", "mqtt pass", mqtt_pass, 20);
-  WiFiManagerParameter custom_mqtt_msg("msg", "mqtt msg", mqtt_msg, 30);
-
-  //WiFiManager
-  //Local intialization. Once its business is done, there is no need to keep it around
-  WiFiManager wifiManager;
-
-#ifdef FIRST_FLASH
-  // Reset Wifi settings for testing
-  wifiManager.resetSettings();
 #endif
 
-  //set config save notify callback
-  wifiManager.setSaveConfigCallback(saveConfigCallback);
+  Serial.println("WiFi setttings:");
+  Serial.print("SSID: ");
+  Serial.print(ssid);
+  Serial.print(":");
+  Serial.println(password);
 
+<<<<<<< Updated upstream
   //set static ip
   //  wifiManager.setSTAStaticIPConfig(IPAddress(10,0,1,99), IPAddress(10,0,1,1), IPAddress(255,255,255,0));
 
@@ -348,7 +319,25 @@ void setup()
     delay(5000);
   }
 #endif
+=======
+    WiFi.mode(WIFI_STA);
+    // Use the functions that return `const char *` because
+    // WiFi.begin() doesn't take String as an arg.
+    WiFi.begin(ssid, password);
+>>>>>>> Stashed changes
 
+    int nErr = 0;
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+        nErr++;
+        if( nErr > 30 ) {
+          Serial.println("\nRestarting!");
+          delay(500);
+          ESP.restart();
+        }
+    }
+    
 #ifdef USE_DISPLAY
   ClrDisplay();
   //Add stuff into the 'display buffer'
@@ -363,22 +352,26 @@ void setup()
   Serial.println("connected...yeey :)");
 
   //read updated parameters
-  strcpy(mqtt_server, custom_mqtt_server.getValue());
-  strcpy(mqtt_port, custom_mqtt_port.getValue());
-  strcpy(mqtt_user, custom_mqtt_user.getValue());
-  strcpy(mqtt_pass, custom_mqtt_pass.getValue());
-  strcpy(mqtt_msg, custom_mqtt_msg.getValue());
+  strcpy(mqtt_server, _mqtt_server); //cfgdat->getMQServer() ); //custom_mqtt_server.getValue());
+  strcpy(mqtt_port, _mqtt_port); //cfgdat->getMQPort() ); //custom_mqtt_port.getValue());
+  strcpy(mqtt_user, _mqtt_user); //cfgdat->getMQUser() ); //custom_mqtt_user.getValue());
+  strcpy(mqtt_pass, _mqtt_pass); //cfgdat->getMQPass() ); //custom_mqtt_pass.getValue());
 
-/*  
+#if 1
   Serial.println("MQTT setttings:");
-  Serial.println(mqtt_server);
+  Serial.print("Server: ");
+  Serial.print(mqtt_server);
+  Serial.print(":");
   Serial.println(mqtt_port);
+  Serial.print("User:   ");
   Serial.println(mqtt_user);
+  Serial.print("Passw:  ");
   Serial.println(mqtt_pass);
+  Serial.print("Msg:    ");
   Serial.println(mqtt_msg);
   Serial.println();
-*/
-
+#endif
+#if 1
   //save the custom parameters to FS
   if (shouldSaveConfig) {
     Serial.println("saving config");
@@ -400,6 +393,7 @@ void setup()
     configFile.close();
     //end save
   }
+#endif
 
   initAdc();
 
@@ -527,16 +521,37 @@ void callback(char* topic, byte* payload, unsigned int length) {
   }
 }
 
+<<<<<<< Updated upstream
+=======
+#ifdef USE_DISPLAY
+void dispError(char *error)
+{
+  OLED.clearDisplay();
+  //Add stuff into the 'display buffer'
+  OLED.setTextColor(WHITE);
+  OLED.setTextSize(1);
+  OLED.setCursor(0, 10);
+  OLED.print(error);
+  OLED.display();                   //output 'display buffer' to screen
+//  OLED.startscrollleft(0x00, 0x0F); //make display scroll
+}
+#endif
+
+>>>>>>> Stashed changes
 void reconnect()
 {
   int nLoop = 0;
   // Loop until we're reconnected
   while (!client.connected()) {
 #ifdef RX_DEBUG
-    Serial.print("Attempting another MQTT connection ... as ");
+    Serial.println("Attempting another MQTT connection ...");
+    Serial.print("* ");
     Serial.println(mqttClient);
-//    Serial.println(mqtt_user);
-//    Serial.println(mqtt_pass);
+    Serial.print("* ");
+    Serial.println(mqtt_user);
+    Serial.print("* ");
+    Serial.println(mqtt_pass);
+    Serial.println("---------------------------------------");
 #endif
     // Attempt to connect
     if (client.connect(mqttClient, mqtt_user, mqtt_pass)) {
@@ -552,7 +567,17 @@ void reconnect()
       if( nLoop == 1 ) {
         char err[16];
         sprintf(err, "Err: %d", client.state());
+<<<<<<< Updated upstream
         DispError(err);
+=======
+        dispError(err);
+        OLED.setCursor(0, 20);
+        OLED.println(mqttClient);
+        OLED.setCursor(0, 30);
+        OLED.println(mqtt_user);
+        OLED.setCursor(0, 50);
+        OLED.println(mqtt_pass);
+>>>>>>> Stashed changes
       }
 #endif
       Serial.print("failed, rc=");
@@ -562,6 +587,9 @@ void reconnect()
       delay(5000);
       if( nLoop++ > 5 ) {
         Serial.println("Restarting!");
+#ifdef USE_DISPLAY
+        dispError("Restarting!");
+#endif
         delay(500);
         ESP.restart();
       }
