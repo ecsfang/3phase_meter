@@ -116,12 +116,12 @@ const int blinkPin = D0;
 EnergyMonitor ct[NR_OF_PHASES];
 
 // The pins connected to the sensors
-#if NR_OF_PHASES == 3
-int sctPin[NR_OF_PHASES] = {ADC_CH0, ADC_CH1, ADC_CH2};
-#endif
+int sctPin[NR_OF_PHASES] = {
+  ADC_CH0, ADC_CH1, ADC_CH2
 #if NR_OF_PHASES == 4
-int sctPin[NR_OF_PHASES] = {ADC_CH0, ADC_CH1, ADC_CH2, ADC_CH3};
+  , ADC_CH3
 #endif
+};
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -329,7 +329,7 @@ void setup()
   Serial.println(mqtt_msg);
   Serial.println();
 #endif
-#if 1
+#if 0
   //save the custom parameters to FS
   if (shouldSaveConfig) {
     Serial.println("saving config");
@@ -389,18 +389,13 @@ void setup()
   });
   ArduinoOTA.onError([](ota_error_t error) {
     Serial.printf("Error[%u]: ", error);
-    if (error == OTA_AUTH_ERROR) {
-      Serial.println("Auth Failed");
-    } else if (error == OTA_BEGIN_ERROR) {
-      Serial.println("Begin Failed");
-    } else if (error == OTA_CONNECT_ERROR) {
-      Serial.println("Connect Failed");
-    } else if (error == OTA_RECEIVE_ERROR) {
-      Serial.println("Receive Failed");
-    } else if (error == OTA_END_ERROR) {
-      Serial.println("End Failed");
-    } else {
-      Serial.println("Unknown error!");
+    switch( error ) {
+    case OTA_AUTH_ERROR:    Serial.println("Auth Failed");     break;
+    case OTA_BEGIN_ERROR:   Serial.println("Begin Failed");    break;
+    case OTA_CONNECT_ERROR: Serial.println("Connect Failed");  break;
+    case OTA_RECEIVE_ERROR: Serial.println("Receive Failed");  break;
+    case OTA_END_ERROR:     Serial.println("End Failed");      break;
+    default:                Serial.println("Unknown error!");
     }
   });
   ArduinoOTA.begin();
@@ -423,7 +418,6 @@ void setup()
   const uint16_t mqtt_port_x = atoi(mqtt_port);
   client.setBufferSize(1024);
   client.setServer(mqtt_server, mqtt_port_x);
-//  client.setServer(mqtt_server, 1883);
 #endif
 
   client.setCallback(callback);
@@ -441,7 +435,6 @@ void setup()
   Debug.println(WiFi.localIP());
   Debug.print("ESP Board MAC Address:  ");
   Debug.println(WiFi.macAddress());
-
 #endif
 
   lwdtFeed();
@@ -577,7 +570,6 @@ void loop()
   client.loop();
 #endif
 
-  //ESP.wdtFeed();
   lwdtFeed();
 
   digitalWrite(LED_BUILTIN, HIGH);
@@ -806,8 +798,6 @@ if( irms[c] < 0.0 )
       continue;
     }
   
-//    if( c == 0 )
-//      digitalWrite(LED_BUILTIN, LOW);
     RMSPower[c] = 230 * irms[c];
 
 #ifdef USE_DISPLAY
@@ -828,8 +818,6 @@ if( irms[c] < 0.0 )
       upd |= 1 << c;
       oldIrms[c] = irms[c];
     }
-//    if( c == 0 )
-//      digitalWrite(LED_BUILTIN, HIGH);
 
     // A new peak-value ... ?
     if (irms[c] > peakCurrent[c])
@@ -847,7 +835,7 @@ if( irms[c] < 0.0 )
     wattNow = RMSPower[c] * duration;                       // So many Wh have been used ...
     kilos[c] += wattNow / 1000;
     todayPower += wattNow;
-    currentPower += RMSPower[c]; //wattNow / 1000;
+    currentPower += RMSPower[c];
   }
 
 #ifdef RX_DEBUG
