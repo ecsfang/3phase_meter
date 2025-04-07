@@ -11,8 +11,9 @@
 
 //#define HOUSE     // Meter outside on the incoming power
 //#define HEATER    // Meter on the heater
-#define SPA       // Meter outside for the SPA
+//#define SPA       // Meter outside for the SPA
 //#define KITCHEN   // Meter on the fuse box for the kitchen (oven etc)
+#define SAUNA     // Meter on the fuse box for the sauna
 
 #define USE_REMOTE_DBG
 
@@ -28,15 +29,20 @@
 #ifdef KITCHEN
 #define METER "Kitchen"
 #endif
+#ifdef SAUNA
+#define METER "Sauna"
+#endif
 
 #ifdef HOUSE
 #define MESSAGE "housePower"  // Default message
 #define SCT_013_000        // The sensor used
+#define RB 120            // Burden resistor
 #define NR_OF_PHASES 3      // Number of phases to watch
 #endif
 #ifdef HEATER
 #define MESSAGE "heaterPower" // Default message
 #define SCT_013_000        // The sensor used
+#define RB 120            // Burden resistor
 #define USE_CORRECTION
 #define USE_DISPLAY
 #define DISP_MSG "Heater"
@@ -45,6 +51,7 @@
 #ifdef KITCHEN
 #define MESSAGE "kitchenPower" // Default message
 #define SCT_013_030        // The sensor used
+#define RB 120            // Burden resistor
 #define NR_OF_PHASES 4      // Number of phases to watch
 #define USE_CORRECTION
 #endif
@@ -53,7 +60,16 @@
 #define USE_DISPLAY
 #define DISP_MSG "SPA"
 #define SCT_013_000        // The sensor used
+#define RB 120            // Burden resistor
 #define NR_OF_PHASES 3      // Number of phases to watch
+#endif
+#ifdef SAUNA
+#define MESSAGE "saunaPower"    // Default message
+#define USE_DISPLAY
+#define DISP_MSG "SAUNA"
+#define SCT_013_000       // The sensor used
+#define RB 100            // Burden resistor
+#define NR_OF_PHASES 3    // Number of phases to watch
 #endif
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels

@@ -89,15 +89,16 @@ const int blinkPin = D0;
 #endif
 
 #if defined(SCT_013_000)
+
 // Settings for the YHDC SCT-013-000 CT sensor
 // Measure current (50mA equal to 100A through the sensor)
 #define IP 100        // 100 A
 #define IPC 0.05      // 50 mA
 #define RT (IP / IPC) // Rt = 100 A ÷ 50 mA = 2000
-#define RB 120        // Burden resistor
 #define CORR_CURRENT (RT / RB)
 
 #elif defined(SCT_013_030)
+
 // Settings for the YHDC SCT-013-030 CT sensor
 // Measure voltage (1V equal to 30A through the sensor)
 // Ip is the rated primary current, and Vs is the output voltage at that current, then
@@ -278,53 +279,10 @@ void setup()
   Serial.print(":");
   Serial.println(password);
 
-<<<<<<< Updated upstream
-  //set static ip
-  //  wifiManager.setSTAStaticIPConfig(IPAddress(10,0,1,99), IPAddress(10,0,1,1), IPAddress(255,255,255,0));
-
-  //add all your parameters here
-  wifiManager.addParameter(&custom_mqtt_server);
-  wifiManager.addParameter(&custom_mqtt_port);
-  wifiManager.addParameter(&custom_mqtt_user);
-  wifiManager.addParameter(&custom_mqtt_pass);
-  wifiManager.addParameter(&custom_mqtt_msg);
-
-  //set minimum quality of signal so it ignores AP's under that quality
-  //defaults to 8%
-  //wifiManager.setMinimumSignalQuality();
-
-  //sets timeout until configuration portal gets turned off
-  //useful to make it all retry or go to sleep
-  //in seconds
-  //wifiManager.setTimeout(120);
-
-  //fetches ssid and pass and tries to connect
-  //if it does not connect it starts an access point with the specified name
-  //here  "AutoConnectAP"
-  //and goes into a blocking loop awaiting configuration
-
-#ifdef USE_DISPLAY
-  ClrDisplay();
-  //Add stuff into the 'display buffer'
-  DispText(0, 10, "Check " METER "_AP");
-  UpdateDisplay(true);
-#endif
-
-#ifndef USE_TEST_DATA
-  if (!wifiManager.autoConnect(METER "_AP")) {
-    Serial.println("failed to connect and hit timeout");
-    delay(3000);
-    //reset and try again, or maybe put it to deep sleep
-    ESP.reset();
-    delay(5000);
-  }
-#endif
-=======
     WiFi.mode(WIFI_STA);
     // Use the functions that return `const char *` because
     // WiFi.begin() doesn't take String as an arg.
     WiFi.begin(ssid, password);
->>>>>>> Stashed changes
 
     int nErr = 0;
     while (WiFi.status() != WL_CONNECTED) {
@@ -521,8 +479,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
   }
 }
 
-<<<<<<< Updated upstream
-=======
 #ifdef USE_DISPLAY
 void dispError(char *error)
 {
@@ -537,7 +493,6 @@ void dispError(char *error)
 }
 #endif
 
->>>>>>> Stashed changes
 void reconnect()
 {
   int nLoop = 0;
@@ -567,9 +522,6 @@ void reconnect()
       if( nLoop == 1 ) {
         char err[16];
         sprintf(err, "Err: %d", client.state());
-<<<<<<< Updated upstream
-        DispError(err);
-=======
         dispError(err);
         OLED.setCursor(0, 20);
         OLED.println(mqttClient);
@@ -577,7 +529,6 @@ void reconnect()
         OLED.println(mqtt_user);
         OLED.setCursor(0, 50);
         OLED.println(mqtt_pass);
->>>>>>> Stashed changes
       }
 #endif
       Serial.print("failed, rc=");

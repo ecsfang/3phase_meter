@@ -14,10 +14,6 @@ void oled_setup()   {
 
   //Add stuff into the 'display buffer'
   OLED.setTextSize(2);
-<<<<<<< Updated upstream
-  OLED.println("Power\nMeter");
-  UpdateDisplay(true); //output 'display buffer' to screen  
-=======
   OLED.setCursor(0,0);
 #ifdef DISP_MSG
   OLED.print(DISP_MSG);
@@ -27,7 +23,6 @@ void oled_setup()   {
 #endif
 OLED.startscrollleft(0x00, 0x0F); //make display scroll 
   OLED.display(); //output 'display buffer' to screen  
->>>>>>> Stashed changes
   ClrDisplay();
 #ifdef HEATER
   OLED.setRotation(2);
@@ -205,42 +200,6 @@ void sendStatus(void)
   // Fill in report
 #if NR_OF_PHASES == 3
   String json;
-#if NR_OF_PHASES == 4
-  json = R"({
-    "Time": $TIME,
-    "IP": $IP,
-    "ENERGY": {
-      "Now": $NOW,
-      "Total": $TOTAL,
-      "Yesterday":$YDAY,
-      "Phase1": {
-        "Today": $TODAY_1,
-        "Current": $CURRENT_1,
-        "Power": $POWER_1,
-        "Peak": $PEAK_1
-      },
-      "Phase2": {
-        "Today": $TODAY_2,
-        "Current": $CURRENT_2,
-        "Power": $POWER_2,
-        "Peak": $PEAK_2
-      },
-      "Phase3": {
-        "Today": $TODAY_3,
-        "Current": $CURRENT_3,
-        "Power": $POWER_3,
-        "Peak": $PEAK_3
-      },
-      "Phase4": {
-        "Today": $TODAY_4,
-        "Current": $CURRENT_4,
-        "Power": $POWER_4,
-        "Peak": $PEAK_4
-      }
-    }
-  })";
-#endif
-#if NR_OF_PHASES == 3
   json = R"({
     "Time": $TIME,
     "IP": $IP,
@@ -266,7 +225,6 @@ void sendStatus(void)
         "Power": $POWER_3,
         "Peak": $PEAK_3
       }
-<<<<<<< Updated upstream
     }
   })";
 #endif
@@ -303,8 +261,6 @@ void sendStatus(void)
         "Power": $POWER_4,
         "Peak": $PEAK_4
       }
-=======
->>>>>>> Stashed changes
     }
   })";
 #endif
