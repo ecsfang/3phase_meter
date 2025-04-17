@@ -13,7 +13,10 @@ passwords and should not be checked in.
 <pre>
   char *ssid="The SSID to connect to";
   char *password="The password to use";
-  char *mqtt_server="192.xxx.xxx.xxx";
+  char *_mqtt_server="192.xxx.xxx.xxx";
+  char *_mqtt_port="xxxx";
+  char *_mqtt_user="user";
+  char *_mqtt_pass="password";
   char *flashpw="Password to use when flashing OTA";
 </pre>
 
