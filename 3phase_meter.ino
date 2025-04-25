@@ -228,7 +228,7 @@ void setup()
   ClrDisplay();
   //Add stuff into the 'display buffer'
   DispText(0, 10, "Booting");
-  UpdateDisplay(true)
+  UpdateDisplay(true);
 #endif
 
   Serial.println(F("Blink LEDs ..."));
@@ -300,7 +300,7 @@ void setup()
   ClrDisplay();
   //Add stuff into the 'display buffer'
   DispText(0, 10, "Connected!");
-  DIspText(0, 20, WiFi.localIP());
+  DispText(0, 20, ip());
   UpdateDisplay(false);
   delay(2000);
   ClrDisplay();
@@ -667,6 +667,14 @@ void sendMsg(const char *topic, const char *m)
   Debug.print(msg);
   Debug.print(" ");
   Debug.println(m);
+#endif
+#ifdef RX_DEBUG
+  Serial.print("Publish message (");
+  Serial.print(strlen(m));
+  Serial.print("): ");
+  Serial.print(msg);
+  Serial.print(" ");
+  Serial.println(m);
 #endif
 #ifdef USE_MQTT
   client.publish(msg, m);

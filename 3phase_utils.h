@@ -65,7 +65,7 @@
 #endif
 #ifdef SAUNA
 #define MESSAGE "saunaPower"    // Default message
-#define USE_DISPLAY
+//#define USE_DISPLAY
 #define DISP_MSG "SAUNA"
 #define SCT_013_000       // The sensor used
 #define RB 100            // Burden resistor

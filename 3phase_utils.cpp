@@ -29,6 +29,7 @@ OLED.startscrollleft(0x00, 0x0F); //make display scroll
 #else
   OLED.setRotation(0);
 #endif
+#endif // USE_DISPLAY
 }
 
 float scale(float f)
@@ -127,7 +128,7 @@ void DispError(char *error)
   //Add stuff into the 'display buffer'
   OLED.setCursor(0, 10);
   OLED.print(error);
-  ClrDisplay(true);
+//  ClrDisplay(true);
 }
 #endif
 

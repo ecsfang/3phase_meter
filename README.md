@@ -1,6 +1,8 @@
 # 3phase_meter
 Arduinobased 3-phase power meter
 
+Enter http://arduino.esp8266.com/stable/package_esp8266com_index.json into the “Additional Boards Manager URLs”
+
 Some resources:
 * https://github.com/fahrvergnuugen/EmonLib
 * https://github.com/jrowberg/i2cdevlib/tree/master/Arduino/ADS1115
