@@ -9,37 +9,20 @@
 #include <coredecls.h>            // settimeofday_cb()
 #include <Timezone.h>             // https://github.com/JChristensen/Timezone
 
-//#define HOUSE     // Meter outside on the incoming power
-//#define HEATER    // Meter on the heater
-//#define SPA       // Meter outside for the SPA
-//#define KITCHEN   // Meter on the fuse box for the kitchen (oven etc)
-#define SAUNA     // Meter on the fuse box for the sauna
+#include "mySSID.h" // Include private SSID and password etc ...
 
 #define USE_REMOTE_DBG
 
 #ifdef HOUSE
 #define METER "House"
-#endif
-#ifdef HEATER
-#define METER "Heater"
-#endif
-#ifdef SPA
-#define METER "Spa"
-#endif
-#ifdef KITCHEN
-#define METER "Kitchen"
-#endif
-#ifdef SAUNA
-#define METER "Sauna"
-#endif
-
-#ifdef HOUSE
 #define MESSAGE "housePower"  // Default message
 #define SCT_013_000        // The sensor used
 #define RB 120            // Burden resistor
 #define NR_OF_PHASES 3      // Number of phases to watch
 #endif
+
 #ifdef HEATER
+#define METER "Heater"
 #define MESSAGE "heaterPower" // Default message
 #define SCT_013_000        // The sensor used
 #define RB 120            // Burden resistor
@@ -48,14 +31,18 @@
 #define DISP_MSG "Heater"
 #define NR_OF_PHASES 3      // Number of phases to watch
 #endif
+
 #ifdef KITCHEN
+#define METER "Kitchen"
 #define MESSAGE "kitchenPower" // Default message
 #define SCT_013_030        // The sensor used
 #define RB 120            // Burden resistor
 #define NR_OF_PHASES 4      // Number of phases to watch
 #define USE_CORRECTION
 #endif
+
 #ifdef SPA
+#define METER "Spa"
 #define MESSAGE "spaPower"    // Default message
 #define USE_DISPLAY
 #define DISP_MSG "SPA"
@@ -63,10 +50,22 @@
 #define RB 120            // Burden resistor
 #define NR_OF_PHASES 3      // Number of phases to watch
 #endif
+
 #ifdef SAUNA
+#define METER "Sauna"
 #define MESSAGE "saunaPower"    // Default message
 //#define USE_DISPLAY
 #define DISP_MSG "SAUNA"
+#define SCT_013_000       // The sensor used
+#define RB 100            // Burden resistor
+#define NR_OF_PHASES 3    // Number of phases to watch
+#endif
+
+#ifdef VARG_HEATER
+#define METER "Heater"
+#define MESSAGE "heaterPower"    // Default message
+//#define USE_DISPLAY
+#define DISP_MSG "Heater"
 #define SCT_013_000       // The sensor used
 #define RB 100            // Burden resistor
 #define NR_OF_PHASES 3    // Number of phases to watch

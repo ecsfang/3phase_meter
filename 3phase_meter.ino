@@ -24,6 +24,8 @@
     change the architectures=avr line to "architectures=avr,esp8266, esp32" (or "architectures=*")
     save and close the file
  ***************************************************************************/
+#define MAIN_INO
+
 #include <FS.h> //this needs to be first, or it all crashes and burns...
 
 #include <Wire.h>
@@ -62,7 +64,6 @@
 #include "EmonLib.h"
 
 //### LOCAL SETTINGS ##########################################
-#include "mySSID.h" // Include private SSID and password etc ...
 const char *otaHost =    METER "MeterOTA";
 const char *mqttClient = METER "MeterTF";
 
@@ -274,9 +275,9 @@ void setup()
 #endif
 
   Serial.println("WiFi setttings:");
-  Serial.print("SSID: ");
+  Serial.print("  SSID: ");
   Serial.print(ssid);
-  Serial.print(":");
+  Serial.print("/");
   Serial.println(password);
 
     WiFi.mode(WIFI_STA);
@@ -290,7 +291,7 @@ void setup()
         Serial.print(".");
         nErr++;
         if( nErr > 30 ) {
-          Serial.println("\nRestarting!");
+          Serial.println("\nFailed to connect .... Restarting!");
           delay(500);
           ESP.restart();
         }
@@ -502,6 +503,7 @@ void reconnect()
     Serial.println("---------------------------------------");
 #endif
     // Attempt to connect
+    Serial.println("Look for MQTT broker ...");
     if (client.connect(mqttClient, mqtt_user, mqtt_pass)) {
 #ifdef RX_DEBUG
       Serial.println("Connected!");
@@ -524,13 +526,21 @@ void reconnect()
         OLED.println(mqtt_pass);
       }
 #endif
-      Serial.print("failed, rc=");
+      Serial.print("  ... failed (");
+      Serial.print(nLoop);
+      Serial.print("), rc=");
       Serial.print(client.state());
-      Serial.println(" try again in 5 seconds");
-      // Wait 5 seconds before retrying
-      delay(5000);
-      if( nLoop++ > 5 ) {
-        Serial.println("Restarting!");
+      Serial.print(" try again in ");
+      Serial.print(TMO_CNT);
+      Serial.println(" seconds!");
+
+      // Wait some seconds before retrying ...
+      for(int t=0; t<TMO_CNT; t++) {
+        lwdtFeed();
+        delay(1000);
+      }
+      if( ++nLoop >= 5 ) {
+        Serial.println("\nFailed to connect to MQTT borker ... Restarting!\n");
 #ifdef USE_DISPLAY
         dispError("Restarting!");
 #endif
