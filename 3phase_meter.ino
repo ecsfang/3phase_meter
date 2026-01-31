@@ -117,11 +117,9 @@ const int blinkPin = D0;
 EnergyMonitor ct[NR_OF_PHASES];
 
 // The pins connected to the sensors
-int sctPin[NR_OF_PHASES] = {
-  ADC_CH0, ADC_CH1, ADC_CH2
-#if NR_OF_PHASES == 4
-  , ADC_CH3
-#endif
+int sctPin[8] = {
+  ADC_CH0, ADC_CH1, ADC_CH2, ADC_CH3,
+  ADC_CH4, ADC_CH5, ADC_CH6, ADC_CH7
 };
 
 WiFiClient espClient;
@@ -133,8 +131,7 @@ RemoteDebug Debug;
 // Housekeeping ....
 unsigned long startMillis[NR_OF_PHASES];
 unsigned long endMillis[NR_OF_PHASES];
-double oldIrms[4] = {-99, -99, -99, -99};
-int oldPower[4] = {-99, -99, -99, -99};
+double oldIrms[NR_OF_PHASES];
 
 // Current values ...
 double irms[NR_OF_PHASES];
@@ -365,6 +362,8 @@ void setup()
     // Replace the default pin reader with the customized ads pin reader
     ct[i].inputPinReader = adcPinReader;
     ct[i].current(sctPin[i], CORR_CURRENT);
+    // Init value container ...
+    oldIrms[i] = -99; // Just not zero ...
   }
 
 #ifdef USE_MQTT
